@@ -1,4 +1,4 @@
-# Machine Learning Institute - Week 3 - Read digits
+# Machine Learning Institute - Week 4 - Multimodal architectures / Image Captioning
 
 This week, we are experimenting with multi-model transformer/LLM models.
 
