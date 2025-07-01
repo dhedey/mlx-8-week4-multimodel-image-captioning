@@ -269,17 +269,16 @@ class ImageCaptioningModel(ModelBase):
         input_caption_token_ids = tokenized_captions[:, 0:-1] # [Start] <tokens>
         output_caption_token_ids = tokenized_captions[:, 1:]  # <tokens> [SEP]
 
-        device = self.get_device()
-
         return {
-            "images": processed_images.to(device),
-            "input_caption_token_ids": input_caption_token_ids.to(device),
-            "output_caption_token_ids": output_caption_token_ids.to(device),
+            "images": processed_images,
+            "input_caption_token_ids": input_caption_token_ids,
+            "output_caption_token_ids": output_caption_token_ids,
         }
 
     def forward(self, collated_batch) -> torch.Tensor:
-        images = collated_batch["images"]
-        input_caption_token_ids = collated_batch["input_caption_token_ids"]
+        device = self.get_device()
+        images = collated_batch["images"].to(device)
+        input_caption_token_ids = collated_batch["input_caption_token_ids"].to(device)
 
         # TRAIN / INFERENCE FLOW
         # => Take the tokens [IMG_START], [PAD] * ImgLength, [IMG_END], [SEP], Padded caption
@@ -296,14 +295,14 @@ class ImageCaptioningModel(ModelBase):
         batch_size = len(images)
 
         residual_stream = self.text_model.embed_for_model(
-            torch.tensor([self.text_model.padding_token_id], dtype=torch.long)
+            torch.tensor([self.text_model.padding_token_id], dtype=torch.long).to(device)
         ).expand((batch_size, self.max_context_length, self.config.embedding_dimension)).clone()
 
         embedded_image_start = self.text_model.embed_for_model(
-            torch.tensor([self.text_model.image_start_token_id], dtype=torch.long)
+            torch.tensor([self.text_model.image_start_token_id], dtype=torch.long).to(device)
         )
         embedded_image_end = self.text_model.embed_for_model(
-            torch.tensor([self.text_model.separator_token_id], dtype=torch.long)
+            torch.tensor([self.text_model.separator_token_id], dtype=torch.long).to(device)
         )
 
         residual_stream[:, 0:1] = embedded_image_start

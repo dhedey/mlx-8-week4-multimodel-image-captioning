@@ -7,6 +7,7 @@ import time
 import wandb
 import pathlib
 import inspect
+import re
 from typing import Optional, Self
 from pydantic import BaseModel as PydanticBaseModel, Field
 
@@ -347,31 +348,20 @@ class ModelTrainerBase:
             overrides: Optional[TrainerOverrides] = None,
         ):
 
-        total_params_count = sum(p.numel() for p in model.parameters() if p.requires_grad)
-        print(f"Initializing {self.__class__.__name__} for {model.__class__.__name__} named \"{model.model_name}\" (total params = {total_params_count})...")
+        self.model = model
+        self.config = config
+
+        learnable_weights_count = sum(p.numel() for p in model.parameters() if p.requires_grad)
+        total_weights_count = sum(p.numel() for p in model.parameters())
+        print(f"Initializing {self.__class__.__name__} for {model.__class__.__name__} named \"{model.model_name}\" (learnable weights = {learnable_weights_count:,} total weights = {total_weights_count:,})")
 
         if overrides is None:
             overrides = TrainerOverrides()
 
-        if overrides.print_detailed_parameter_counts:
-            print("All parameter sizes:")
-            normalized_parameter_counts = {}
-            import re
-            for name, parameter in model.named_parameters():
-                if not parameter.requires_grad:
-                    continue
-                normalized_name = re.sub(r'\d+', '*', name)
-                if normalized_name in normalized_parameter_counts:
-                    normalized_parameter_counts[normalized_name] += parameter.numel()
-                else:
-                    normalized_parameter_counts[normalized_name] = parameter.numel()
-            for name, count in sorted(normalized_parameter_counts.items(), key=lambda item: item[1], reverse=True):
-                print(f"- {name}: {count:,}")
-
         torch.manual_seed(overrides.seed)
 
-        self.model = model
-        self.config = config
+        if overrides.print_detailed_parameter_counts:
+            self.print_detailed_parameter_counts()
 
         self.validate_after_epochs = overrides.validate_after_epochs
 
@@ -609,7 +599,30 @@ class ModelTrainerBase:
 
     def _validate(self) -> ValidationResults: 
         raise NotImplementedError("This class method should be implemented by subclasses")
-    
+
+    def print_detailed_parameter_counts(self) -> None:
+        print("All parameter sizes:")
+        normalized_parameter_counts = {}
+        for name, parameter in self.model.named_parameters():
+            if not parameter.requires_grad:
+                continue
+            normalized_name = re.sub(r'\d+', '*', name)
+            if normalized_name in normalized_parameter_counts:
+                normalized_parameter_counts[normalized_name]["instances"] += 1
+                normalized_parameter_counts[normalized_name]["weights_count"] += parameter.numel()
+            else:
+                normalized_parameter_counts[normalized_name] = {
+                    "instances": 1,
+                    "weights_count": parameter.numel(),
+                }
+        sorted_params = sorted(
+            normalized_parameter_counts.items(),
+            key=lambda item: item[1]["weights_count"],
+            reverse=True
+        )
+        for name, params in sorted_params:
+            print(f"- {name}: {params["weights_count"]:,} across {params["instances"]} instances")
+
     def save_model(self):
         scheduler_state = self.scheduler.state_dict() if self.scheduler is not None else None
         training_state = TrainingState(
