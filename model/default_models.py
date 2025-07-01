@@ -38,7 +38,7 @@ DEFAULT_MODEL_PARAMETERS = {
         ),
         "model_trainer": ImageCaptioningTrainer,
         "training": ImageCaptioningTrainingConfig(
-            batch_size=256,
+            batch_size=128,
             epochs=20,
             learning_rate=0.001,
             optimizer="adamw",
