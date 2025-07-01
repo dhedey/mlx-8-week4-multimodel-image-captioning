@@ -40,6 +40,12 @@ if __name__ == "__main__":
         action='store_true',
         help='Disable artifact uploading to W&B (if wandb is enabled)'
     )
+    parser.add_argument(
+        '--end-epoch',
+        type=int,
+        default=None,
+        help='set number of epochs'
+    )
     
     args = parser.parse_args()
 
@@ -72,6 +78,7 @@ if __name__ == "__main__":
 
     overrides = TrainerOverrides(
         print_detailed_parameter_counts=True,
+        override_to_epoch=args.end_epoch,
     )
     trainer = parameters["model_trainer"](
         model=model,
