@@ -101,7 +101,7 @@ class ImageCaptioningTrainer(ModelTrainerBase):
 
     def process_batch(self, collated_batch) -> BatchResults:
         caption_logits = self.model(collated_batch)
-        caption_token_ids = collated_batch["output_caption_token_ids"]
+        caption_token_ids = collated_batch["output_caption_token_ids"].to(self.model.get_device())
 
         # The CrossEntropyLoss expects the second dimension to be the token id dimension
         reorganized_logits = einops.rearrange(
