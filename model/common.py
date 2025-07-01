@@ -39,6 +39,8 @@ class TrainingConfig(PersistableData):
     epochs: int
     learning_rate: float
     warmup_epochs: int = 0 # Number of epochs to warm up the learning rate
+    print_after_batches: int = 10
+    epoch_max_batches: Optional[int] = None
     optimizer: str = "AdamW"
     """
     The optimizer to use for training.
@@ -114,6 +116,7 @@ class TrainerOverrides(PersistableData):
     validate_after_epochs: int = 1
     seed: int = 42
     use_dataset_cache: bool = True
+    print_detailed_parameter_counts: bool = False
 
 class ModelBase(nn.Module):
     registered_types: dict[str, type] = {}
@@ -350,6 +353,21 @@ class ModelTrainerBase:
         if overrides is None:
             overrides = TrainerOverrides()
 
+        if overrides.print_detailed_parameter_counts:
+            print("All parameter sizes:")
+            normalized_parameter_counts = {}
+            import re
+            for name, parameter in model.named_parameters():
+                if not parameter.requires_grad:
+                    continue
+                normalized_name = re.sub(r'\d+', '*', name)
+                if normalized_name in normalized_parameter_counts:
+                    normalized_parameter_counts[normalized_name] += parameter.numel()
+                else:
+                    normalized_parameter_counts[normalized_name] = parameter.numel()
+            for name, count in sorted(normalized_parameter_counts.items(), key=lambda item: item[1], reverse=True):
+                print(f"- {name}: {count:,}")
+
         torch.manual_seed(overrides.seed)
 
         self.model = model
@@ -501,7 +519,7 @@ class ModelTrainerBase:
     def train_epoch(self):
         self.model.train()
 
-        print_every = 10
+        print_every = self.config.print_after_batches
         running_loss = 0.0
         running_samples = 0
         train_data_loader = self.get_train_data_loader()
@@ -527,10 +545,14 @@ class ModelTrainerBase:
             self.optimizer.step()
 
             batch_num = batch_idx + 1
-            if batch_num % print_every == 0:
+            if batch_num % print_every == 0 or batch_num == total_batches:
                 print(f"Epoch {self.epoch}, Batch {batch_num}/{total_batches}, Average Loss: {(running_loss / running_samples):.3g}")
                 running_loss = 0.0
                 running_samples = 0
+
+            if self.config.epoch_max_batches is not None and batch_num >= self.config.epoch_max_batches:
+                print("Breaking early due to config.epoch_max_batches")
+                break
 
         average_loss = epoch_loss / epoch_samples if epoch_samples > 0 else 0.0
         training_time = time.time() - start_epoch_time_at

@@ -1,7 +1,7 @@
 # Run as uv run -m model.start_train
 
 import argparse
-from .common import select_device, ModelBase, upload_model_artifact
+from .common import select_device, ModelBase, upload_model_artifact, TrainerOverrides
 from .default_models import DEFAULT_MODEL_PARAMETERS, DEFAULT_MODEL_NAME, WANDB_PROJECT_NAME, WANDB_ENTITY
 import wandb
 import os
@@ -70,9 +70,13 @@ if __name__ == "__main__":
         config=parameters["model"],
     ).to(device)
 
+    overrides = TrainerOverrides(
+        print_detailed_parameter_counts=True,
+    )
     trainer = parameters["model_trainer"](
         model=model,
         config=parameters["training"],
+        overrides=overrides,
     )
     results = trainer.train()
 

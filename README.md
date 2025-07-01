@@ -28,3 +28,8 @@ uv run -m model.start_train
 ```bash
 uv run streamlit run streamlit/app.py
 ```
+
+# TODOs
+
+* Add positional encoding
+* Offset the output
