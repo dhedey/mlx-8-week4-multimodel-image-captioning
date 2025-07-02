@@ -22,6 +22,7 @@ dependencies = [
     "torchvision>=0.22.1",
     "einops>=0.8.1",
     "peft>=0.15.2",
+    "qwen-vl-utils>=0.0.11",
 ]
 
 # https://docs.astral.sh/uv/concepts/projects/workspaces/

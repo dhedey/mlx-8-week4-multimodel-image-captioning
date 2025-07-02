@@ -2,6 +2,7 @@ from datasets import load_dataset
 from transformers import AutoProcessor, AutoModelForVision2Seq
 from PIL import Image
 import torch, os
+from qwen_vl_utils import process_vision_info
 
 # Load the first 1000 images from flickr30k
 
@@ -14,9 +15,33 @@ processor = AutoProcessor.from_pretrained(model_name)
 model = AutoModelForVision2Seq.from_pretrained(model_name, torch_dtype=torch.float16, device_map="auto")
 
 def pirate_caption(example):
-    image = example["image"]
-    prompt = "Describe this image in the style of a pirate. <|image_1|>"
-    inputs = processor(images=image, text=prompt, return_tensors="pt").to(model.device)
+    messages = [
+        {
+            "role": "user",
+            "content": [
+                {
+                    "type": "image",
+                    "image": example["image"],
+                },
+                {"type": "text", "text": "Describe this image in the style of a pirate."},
+            ],
+        }
+    ]
+
+    # Preparation for inference
+    text = processor.apply_chat_template(
+        messages, tokenize=False, add_generation_prompt=True
+    )
+    image_inputs, video_inputs = process_vision_info(messages)
+    inputs = processor(
+        text=[text],
+        images=image_inputs,
+        videos=video_inputs,
+        padding=True,
+        return_tensors="pt",
+    )
+    inputs = inputs.to(model.device)
+
     with torch.no_grad():
         output = model.generate(**inputs, max_new_tokens=64)
     caption = processor.batch_decode(output, skip_special_tokens=True)[0]
