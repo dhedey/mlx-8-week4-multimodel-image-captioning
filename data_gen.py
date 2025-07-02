@@ -15,7 +15,7 @@ model = AutoModelForVision2Seq.from_pretrained(model_name, torch_dtype=torch.flo
 
 def pirate_caption(example):
     image = example["image"]
-    prompt = "Describe this image in the style of a pirate."
+    prompt = "Describe this image in the style of a pirate. <|image_1|>"
     inputs = processor(images=image, text=prompt, return_tensors="pt").to(model.device)
     with torch.no_grad():
         output = model.generate(**inputs, max_new_tokens=64)
