@@ -85,20 +85,51 @@ class MaskedSelfAttentionConfig(ModuleConfig):
     v_dimension: int
     embedding_dimension: int
     num_heads: int
+    rope_enabled: bool = False
+    mask_future_tokens: bool = True
+
+
+def apply_rotary_pos_embeddings(q, k):
+    # q, k: (batch, num_heads, seq_len, head_dim)
+    seq_len = q.shape[-2]
+    head_dim = q.shape[-1]
+    device = q.device
+
+    # Compute rotary frequencies
+    theta = 10000 ** (torch.arange(0, head_dim, 2, device=device).float() / head_dim)
+    pos = torch.arange(seq_len, device=device).float()
+    freqs = torch.einsum('i,j->ij', pos, 1.0 / theta)  # (seq_len, head_dim/2)
+
+    # Compute cos and sin
+    emb = torch.cat([freqs, freqs], dim=-1)  # (seq_len, head_dim)
+    cos = emb.cos()[None, None, :, :]  # (1, 1, seq_len, head_dim)
+    sin = emb.sin()[None, None, :, :]  # (1, 1, seq_len, head_dim)
+
+    def rotate(x):
+        x1 = x[..., ::2]
+        x2 = x[..., 1::2]
+        x_rot = torch.stack([-x2, x1], dim=-1).reshape_as(x)
+        return x_rot
+
+    q_out = q * cos + rotate(q) * sin
+    k_out = k * cos + rotate(k) * sin
+    return q_out, k_out
+
 
 class MaskedSelfAttention(nn.Module):
-    def __init__(self, params: MaskedSelfAttentionConfig, mask_future_tokens=True):
+    def __init__(self, config: MaskedSelfAttentionConfig):
         super().__init__()
-        self.embedding_dimension = params.embedding_dimension
-        self.kq_dimension = params.kq_dimension
-        self.v_dimension = params.v_dimension
-        self.num_heads = params.num_heads
+        self.embedding_dimension = config.embedding_dimension
+        self.kq_dimension = config.kq_dimension
+        self.v_dimension = config.v_dimension
+        self.num_heads = config.num_heads
 
-        self.query_projection = nn.Linear(params.embedding_dimension, params.kq_dimension * params.num_heads)
-        self.key_projection = nn.Linear(params.embedding_dimension, params.kq_dimension * params.num_heads)
-        self.value_projection = nn.Linear(params.embedding_dimension, params.v_dimension * params.num_heads)
-        self.output_projection = nn.Linear(params.v_dimension * params.num_heads, params.embedding_dimension)
-        self.mask_future_tokens = mask_future_tokens
+        self.query_projection = nn.Linear(config.embedding_dimension, config.kq_dimension * config.num_heads)
+        self.key_projection = nn.Linear(config.embedding_dimension, config.kq_dimension * config.num_heads)
+        self.value_projection = nn.Linear(config.embedding_dimension, config.v_dimension * config.num_heads)
+        self.output_projection = nn.Linear(config.v_dimension * config.num_heads, config.embedding_dimension)
+        self.mask_future_tokens = config.mask_future_tokens
+        self.rope_enabled = config.rope_enabled
 
         self.register_buffer('_cached_mask', torch.empty(0), persistent=False)
 
@@ -107,6 +138,9 @@ class MaskedSelfAttention(nn.Module):
         queries = self.query_projection(x).reshape(*x.shape[:-1], self.num_heads, self.kq_dimension).transpose(-2, -3)  # Shape: (batch_size, num_heads, sequence_length, kq_dimension)
         keys = self.key_projection(x).reshape(*x.shape[:-1], self.num_heads, self.kq_dimension).transpose(-2, -3)       # Shape: (batch_size, num_heads, sequence_length, kq_dimension)
         values = self.value_projection(x).reshape(*x.shape[:-1], self.num_heads, self.v_dimension).transpose(-2, -3)   # Shape: (batch_size, num_heads, sequence_length, v_dimension)
+
+        if self.rope_enabled:
+            queries, keys = apply_rotary_pos_embeddings(queries, keys)
 
         attention_scores = queries @ keys.transpose(-2, -1) # Shape: (batch_size, num_heads, sequence_length, sequence_length)
         if self.mask_future_tokens:
@@ -123,3 +157,6 @@ class MaskedSelfAttention(nn.Module):
         output_values = output_values.transpose(-2, -3).reshape(*x.shape[:-1], self.num_heads * self.v_dimension) # Shape: (batch_size, sequence_length, num_heads * v_dimension)
         residual = self.output_projection(output_values)     # Shape: (batch_size, sequence_length, embedding_dimension)
         return residual
+
+
+

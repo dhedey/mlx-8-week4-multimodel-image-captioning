@@ -18,7 +18,7 @@ from .trainer import ModelTrainerBase, ImageCaptioningTrainer, ImageCaptioningTr
 from .wandb_config import WANDB_ENTITY, WANDB_PROJECT_NAME
 
 DEFAULT_MODEL_PARAMETERS = {
-    "image-captioner-v1": {
+    "image-captioner-v1-rope": {
         "model_class": ImageCaptioningModel,
         "model": ImageCaptioningModelConfig(
             embedding_dimension = 256,
@@ -29,6 +29,7 @@ DEFAULT_MODEL_PARAMETERS = {
             heads_per_layer = 8,
             attention_kq_dimension = 128,
             attention_v_dimension = 128,
+            rope_enabled = True,
 
             mlp_hidden_dimension = 256 * 4,
             mlp_dropout = 0.2,
@@ -44,7 +45,42 @@ DEFAULT_MODEL_PARAMETERS = {
             optimizer="adamw",
         ),
     },
+    "image-captioner-v1": {
+        "model_class": ImageCaptioningModel,
+        "model": ImageCaptioningModelConfig(
+            embedding_dimension=256,
+            max_tokens_per_caption=80,
+            tokens_per_image=1,  # CLIP encoder encodes to a 512 dimensional vector already
+
+            num_layers=8,
+            heads_per_layer=8,
+            attention_kq_dimension=128,
+            attention_v_dimension=128,
+            rope_enabled=False,
+
+            mlp_hidden_dimension=256 * 4,
+            mlp_dropout=0.2,
+
+            freeze_caption_weights=True,
+            freeze_image_weights=True,
+        ),
+        "model_trainer": ImageCaptioningTrainer,
+        "training": ImageCaptioningTrainingConfig(
+            batch_size=128,
+            epochs=10,
+            learning_rate=0.001,
+            optimizer="adamw",
+        ),
+    },
 }
+
+# MultiModalModel:
+# (llm: "bert-text-custom-decoder" + image: "clip")
+# (llm: "qwen" + image: "clip")
+# Interface:
+# * preprocess_images(images) -> ImagesSection
+# * preprocess_text(texts) -> TextSection
+# * forward(sections) -> [SectionResult]
 
 DEFAULT_MODEL_NAME=list(DEFAULT_MODEL_PARAMETERS.keys())[0]
 

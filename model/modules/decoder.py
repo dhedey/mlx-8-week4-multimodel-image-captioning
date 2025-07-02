@@ -12,6 +12,7 @@ class DecoderBlockConfig(ModuleConfig):
     num_heads: int
     kq_dimension: int
     v_dimension: int
+    rope_enabled: bool
 
     mlp_hidden_dimension: int
     mlp_dropout: float
@@ -25,6 +26,7 @@ class DecoderBlock(nn.Module):
             v_dimension=config.v_dimension,
             embedding_dimension=embedding_dimension,
             num_heads=config.num_heads,
+            rope_enabled=config.rope_enabled,
         ))
         self.ln_1 = nn.LayerNorm(embedding_dimension)
         self.mlp = MultiLayerPerceptron(

@@ -210,6 +210,7 @@ class ImageCaptioningModelConfig(ModuleConfig):
     heads_per_layer: int
     attention_kq_dimension: int
     attention_v_dimension: int
+    rope_enabled: bool
 
     mlp_hidden_dimension: int
     mlp_dropout: float
@@ -240,6 +241,7 @@ class ImageCaptioningModel(ModelBase):
                 num_heads = self.config.heads_per_layer,
                 kq_dimension = self.config.attention_kq_dimension,
                 v_dimension = self.config.attention_v_dimension,
+                rope_enabled = self.config.rope_enabled,
 
                 mlp_hidden_dimension = self.config.mlp_hidden_dimension,
                 mlp_dropout = self.config.mlp_dropout,
