@@ -53,7 +53,7 @@ if __name__ == "__main__":
         '--validate-after-epochs',
         type=int,
         default=1,
-        default="Run validation after every N epochs (default: 1)",
+        help="Run validation after every N epochs (default: 1)",
     )
     parser.add_argument(
         '--early-stopping',
