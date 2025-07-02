@@ -13,6 +13,7 @@ import pandas as pd
 import math
 import PIL
 from typing import Optional, Self, Any
+from peft import LoraConfig, TaskType, get_peft_model
 
 from sympy.stats.rv import probability
 
@@ -248,6 +249,19 @@ class QwenMultiModalModel(nn.Module):
         self.tokenizer: transformers.Qwen2TokenizerFast = transformers.AutoTokenizer.from_pretrained(model_name)
         self.auto_model: transformers.AutoModelForCausalLM = transformers.AutoModelForCausalLM.from_pretrained(model_name)
         self.qwen_model: transformers.Qwen3Model = self.auto_model.model
+
+        # Enable LORA on the Qwen model. get_peft_model actually changes it in-place
+        lora_config = LoraConfig(
+            r=16,
+            target_modules=["q_proj", "v_proj"],
+            task_type=TaskType.CAUSAL_LM,
+            lora_alpha=32,
+            lora_dropout=0.05
+        )
+        self.peft_model = get_peft_model(
+            self.auto_model,
+            lora_config,
+        )
 
         # SPECIAL TOKENS
         # <|im_start|>, <|im_end|>, <|user|>, <|assistant|>:

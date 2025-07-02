@@ -21,6 +21,7 @@ dependencies = [
     "streamlit>=1.46.0",
     "torchvision>=0.22.1",
     "einops>=0.8.1",
+    "peft>=0.15.2",
 ]
 
 # https://docs.astral.sh/uv/concepts/projects/workspaces/
