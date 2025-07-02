@@ -25,7 +25,7 @@ def pirate_caption(example):
                     "type": "image",
                     "image": example["image"],
                 },
-                {"type": "text", "text": "provide a short description in the style of a pirate of this image."},
+                {"type": "text", "text": "Provide a short english description in the style of a pirate of this image. No more than 100 words."},
             ],
         }
     ]
@@ -45,8 +45,8 @@ def pirate_caption(example):
     inputs = inputs.to(model.device)
 
     with torch.no_grad():
-        output = model.generate(**inputs, max_new_tokens=64, temperature=0.8, do_sample=True)
-    caption = processor.batch_decode(output, skip_special_tokens=True)[0]
+        output = model.generate(**inputs, max_new_tokens=256, temperature=0.5, do_sample=True)
+    caption = processor.batch_decode(output, skip_special_tokens=True)[0].split("assistant")[-1].strip()
     example["caption"] = caption
     print(f"Generated caption: {caption}")
     return example
