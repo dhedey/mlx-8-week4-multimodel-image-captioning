@@ -12,8 +12,8 @@ dataset = load_dataset("nlphuji/flickr30k", split="test[:1000]", data_dir=data_f
 # Load Qwen2.5-VL-3B-Instruct model and processor
 model_name = "Qwen/Qwen2.5-VL-3B-Instruct"
 processor = AutoProcessor.from_pretrained(model_name)
-model = AutoModelForVision2Seq.from_pretrained(model_name, torch_dtype=torch.float16, device_map="auto")
-
+model = AutoModelForVision2Seq.from_pretrained(model_name, torch_dtype=torch.float16, device_map="auto").to("cuda" if torch.cuda.is_available() else "cpu")
+print(f"{"cuda" if torch.cuda.is_available() else "cpu"} is available for processing.")
 def pirate_caption(example):
     messages = [
         {
@@ -23,7 +23,7 @@ def pirate_caption(example):
                     "type": "image",
                     "image": example["image"],
                 },
-                {"type": "text", "text": "Describe this image in the style of a pirate."},
+                {"type": "text", "text": "provide a short description in the style of a pirate of this image."},
             ],
         }
     ]
