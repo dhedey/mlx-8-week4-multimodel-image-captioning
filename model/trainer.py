@@ -58,6 +58,7 @@ class ImageCaptioningV2Trainer(ModelTrainerBase):
                 for caption in image_captions:
                     captions.append(caption)
                     images.append(image)
+                    break # Only use the first caption for each image for now to speed up epochs
 
             return {
                 "image": images,
@@ -134,6 +135,17 @@ class ImageCaptioningV2Trainer(ModelTrainerBase):
         )
     
     def _validate(self) -> ValidationResults:
+        print_example_count = 0
+        for raw_batch in self.uncollated_validation_loader:
+            for item in raw_batch:
+                if print_example_count >= self.config.validation_max_print_examples:
+                    break
+                print(f"Example {print_example_count + 1}")
+                print(f"- Actual caption   : {item["caption"]}")
+                caption = self.model.generate_caption(item["image"])
+                print(f"- Generated caption: {caption}")
+                print_example_count += 1
+
         total_loss = 0.0
         num_samples = 0
 
@@ -147,18 +159,6 @@ class ImageCaptioningV2Trainer(ModelTrainerBase):
             if self.config.validation_max_batches is not None and batch_num >= self.config.validation_max_batches:
                 print("Ending validation early due to self.config.validation_max_batches")
                 break
-
-        print_example_count = 0
-
-        for raw_batch in self.uncollated_validation_loader:
-            for item in raw_batch:
-                if print_example_count >= self.config.validation_max_print_examples:
-                    break
-                print(f"Example {print_example_count + 1}")
-                print(f"- Actual caption   : {item["caption"]}")
-                caption = self.model.generate_caption(item["image"])
-                print(f"- Generated caption: {caption}")
-                print_example_count += 1
 
         average_loss = total_loss / num_samples if num_samples > 0 else 0.0
 

@@ -448,12 +448,13 @@ class ImageCaptioningModelV2(ModelBase):
         collated_batch = self.collate([{"image": image, "caption": ""}])
         output_token_ids = []
 
-        max_generated_caption_length = 128 # Avoid possible infinite loops
+        max_generated_caption_length = 50 # Avoid possible infinite loops
         is_truncated = False
 
         for i in range(max_generated_caption_length):
-            caption_logits = self.forward(collated_batch)
-            next_token_logits = caption_logits[0, i, :] # batch_index 0, sequence_index 1, take each token logit
+            result: CaptionSectionResult = self.forward(collated_batch)
+            caption_logits = result.section_logits
+            next_token_logits = caption_logits[0, i + 1, :] # batch_index 0, sequence_index 1, take each token logit
             next_token_id = next_token_logits.argmax().item()
             # probabilities = next_token_logits.softmax(dim=-1)
             # next_token_id = torch.searchsorted(probabilities.cumsum(0), torch.rand(1)).item()
@@ -461,6 +462,11 @@ class ImageCaptioningModelV2(ModelBase):
                 break
             else:
                 output_token_ids.append(next_token_id)
+                caption_section: CaptionSection = collated_batch["caption"]
+                caption_section.section_token_ids = torch.cat([
+                    caption_section.section_token_ids,
+                    torch.tensor([[next_token_id]], dtype=torch.long, device=caption_section.section_token_ids.device),
+                ], dim=1)
         else:
             is_truncated = True
 

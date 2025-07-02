@@ -56,6 +56,11 @@ if __name__ == "__main__":
         help="Run validation after every N epochs (default: 1)",
     )
     parser.add_argument(
+        '--immediate-validation',
+        action='store_true',
+        help='Run validation immediately after loading the model'
+    )
+    parser.add_argument(
         '--early-stopping',
         action='store_true',
         help='Enable early stopping during training'
@@ -125,6 +130,11 @@ if __name__ == "__main__":
         config=parameters["training"],
         overrides=overrides,
     )
+
+    if args.immediate_validation:
+        print("Immediate validation enabled, running validation before training:")
+        trainer.run_validation()
+
     results = trainer.train()
 
     if wandb.run is not None and not args.no_upload_artifacts:
