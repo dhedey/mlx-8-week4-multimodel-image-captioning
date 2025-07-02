@@ -37,5 +37,6 @@ tmux new -s sweep
 # Check GPU usage with the nvtop command
 
 # Now run a script, e.g.
-# uv run -m model.continue_train
-# uv run -m model.models
+# uv run -m model.start_train --wandb
+# uv run -m model.continue_train --wandb
+# uv run -m model.models --wandb

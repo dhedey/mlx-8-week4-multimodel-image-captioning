@@ -1,3 +1,4 @@
+from dataclasses import dataclass
 import PIL.Image
 import torch.nn.functional as F
 import torch.nn as nn
@@ -11,7 +12,7 @@ import einops
 import pandas as pd
 import math
 import PIL
-from typing import Optional, Self
+from typing import Optional, Self, Any
 
 from sympy.stats.rv import probability
 
@@ -36,6 +37,7 @@ class ClipImageEncoderConfig(ModuleConfig):
     model_name: str = "openai/clip-vit-base-patch32"
     tokens_per_image: int
     model_embedding_dimension: int
+    freeze_visual_model: bool = True
 
 class ClipImageEncoder(ImageEncoder):
     def __init__(self, config: ClipImageEncoderConfig):
@@ -43,6 +45,10 @@ class ClipImageEncoder(ImageEncoder):
         self.processor = transformers.CLIPProcessor.from_pretrained(config.model_name, use_fast=True)
         self.model = transformers.CLIPModel.from_pretrained(config.model_name)
         self.model.text_model = None # Remove unneeded weights
+
+        if config.freeze_visual_model:
+            self.model.requires_grad_(False)
+    
         self.config = config
         self.linear_mapping = nn.Linear(
             self.model.config.projection_dim,
@@ -55,6 +61,8 @@ class ClipImageEncoder(ImageEncoder):
         return self.processor(images=images, return_tensors="pt")["pixel_values"]
     
     def forward(self, preprocessed: torch.Tensor) -> torch.Tensor:
+        preprocessed = preprocessed.to(self.model.device)
+
         # (batch_size, model_projection_dim) => (batch_size, image_embedding_dimension)
         image_vector = self.model.get_image_features(pixel_values=preprocessed)
         # (batch_size, model_projection_dim) => (batch_size, tokens_per_image * model_embedding_dimension)
@@ -201,6 +209,253 @@ class DecoderLayers(nn.Module):
             residual_stream = decoder(residual_stream)
         return residual_stream
 
+
+class QwenMultiModalModelConfig(ModuleConfig):
+    freeze_visual_model: bool
+
+@dataclass
+class Section:
+    batch_size: int
+
+@dataclass
+class CaptionSection(Section):
+    section_token_ids: torch.LongTensor
+    """The <|section_start|> <|caption|> ...text... <|section_end|> tokens"""
+
+@dataclass
+class ImageSection(Section):
+    prepared_image: Any
+
+@dataclass
+class SectionResult:
+    pass
+
+@dataclass
+class CaptionSectionResult(SectionResult):
+    section_logits: torch.Tensor
+
+@dataclass
+class ImageSectionResult(SectionResult):
+    pass
+
+class QwenMultiModalModel(nn.Module):
+    def __init__(self, config: QwenMultiModalModelConfig):
+        super().__init__()
+        model_name = "Qwen/Qwen3-0.6B-Base"
+
+        self.config = config
+
+        self.tokenizer: transformers.Qwen2TokenizerFast = transformers.AutoTokenizer.from_pretrained(model_name)
+        self.auto_model: transformers.AutoModelForCausalLM = transformers.AutoModelForCausalLM.from_pretrained(model_name)
+        self.qwen_model: transformers.Qwen3Model = self.auto_model.model
+
+        # SPECIAL TOKENS
+        # <|im_start|>, <|im_end|>, <|user|>, <|assistant|>:
+        # > Chat/Instruct models: Used and understood.
+        # > Base model: Present in vocab, but not used for chat structure by default.
+        # > <|endoftext|>: Used by both.
+
+        # Let's use the following structure:
+        # <|im_start|><|image|>   ... <|im_end|>
+        # <|im_start|><|caption|> ... <|im_end|>
+
+        # Add custom tokens
+        self.tokenizer.add_tokens(["<|image|>", "<|caption|>"], special_tokens=True)
+        self.image_token_id = self.tokenizer.convert_tokens_to_ids("<|image|>")
+        self.caption_token_id = self.tokenizer.convert_tokens_to_ids("<|caption|>")
+        self.start_section_token_id = self.tokenizer.convert_tokens_to_ids("<|im_start|>")
+        self.end_section_token_id = self.tokenizer.convert_tokens_to_ids("<|im_end|>")
+        self.padding_token_id = self.tokenizer.pad_token_id
+        self.qwen_model.resize_token_embeddings(len(self.tokenizer))
+
+        self.embedding_dimension = self.qwen_model.config.hidden_size
+
+        self.image_encoder = ClipImageEncoder(ClipImageEncoderConfig(
+            tokens_per_image=1,  # CLIP encodes to a 512-dimensional vector already
+            model_embedding_dimension=self.embedding_dimension,
+            freeze_visual_model=self.config.freeze_visual_model,
+        ))
+
+        special_tokens = {
+            "<|pad|>": self.padding_token_id,
+            "<|section_start|>": self.start_section_token_id,
+            "<|section_end|>": self.end_section_token_id,
+            "<|image|>": self.image_token_id,
+            "<|caption|>": self.caption_token_id,
+        }
+        print(f"Special token ids: {special_tokens}")
+
+    def preprocess_images(self, images) -> ImageSection:
+        return ImageSection(
+            batch_size=len(images),
+            prepared_image=self.image_encoder.pre_process(images)
+        )
+
+    def preprocess_captions(self, captions: list[str]) -> CaptionSection:
+        batch_size = len(captions)
+
+        # We want an end token before padding, but the tokenizer doesn't add it automatically.
+        # So instead we get the tokenizer to just return lists and we put it into a tensor manually
+        token_id_lists = self.tokenizer(
+            captions,
+            return_tensors=None,
+            padding=transformers.utils.PaddingStrategy.DO_NOT_PAD,
+        )["input_ids"]
+        token_id_lists_max_length = max(len(ids) for ids in token_id_lists)
+        section_length = token_id_lists_max_length + 3  # +3 for <|im_start|>, <|caption|>, <|im_end|>
+        token_ids_tensor = torch.zeros((batch_size, section_length), dtype=torch.long)
+        torch.fill(token_ids_tensor, self.padding_token_id)  # Fill with padding token id
+        for i, token_ids in enumerate(token_id_lists):
+            token_id_length = len(token_ids)
+            token_ids_tensor[i, 0] = self.start_section_token_id
+            token_ids_tensor[i, 1] = self.caption_token_id
+            for j in range(token_id_length):
+                token_ids_tensor[i, j + 2] = token_ids[j]
+            token_ids_tensor[i, 2 + token_id_length] = self.end_section_token_id
+            # We have already filled with padding ids
+
+        return CaptionSection(
+            batch_size=batch_size,
+            section_token_ids=token_ids_tensor,
+        )
+    
+    def token_ids_to_text(self, token_ids: list[int]) -> str:
+        # Convert token ids to text using the tokenizer
+        return self.tokenizer.decode(token_ids, skip_special_tokens=True)
+    
+    def embed_token_id(self, token_id: int, batch_size, device) -> torch.Tensor:
+        input = torch.tensor([token_id], dtype=torch.long).to(device)
+        embedding: torch.Tensor = self.qwen_model.embed_tokens(input)
+        return einops.repeat(embedding, '1 embedding -> batch_size 1 embedding', batch_size=batch_size)
+
+    def forward(self, sections: list[Section]) -> list[SectionResult]:
+        # Go through each section, embed then, concatenate the embeddings, then run the model,
+        # then return the results for each section.
+
+        embedder = SectionEmbedder()
+        device = next(self.parameters()).device
+        for section in sections:
+            embedder.start_section()
+            match section:
+                case ImageSection():
+                    batch_size = section.batch_size
+                    prepared_image = section.prepared_image
+                    embedder.add(self.embed_token_id(self.start_section_token_id, batch_size, device))
+                    embedder.add(self.embed_token_id(self.image_token_id, batch_size, device))
+                    embedder.add(self.image_encoder(prepared_image))
+                    embedder.add(self.embed_token_id(self.end_section_token_id, batch_size, device))
+                case CaptionSection():
+                    section_token_ids = section.section_token_ids
+                    section_token_ids = section_token_ids.to(self.qwen_model.device)
+                    embedder.add(self.qwen_model.embed_tokens(section_token_ids))
+            embedder.end_section(section)
+
+        # (Batch, Sequence, Embedding)
+        final_hidden_state = self.qwen_model(
+            inputs_embeds=torch.cat(embedder.embeddings, dim=-2)  # Concatenate along the sequence dimension,
+        ).last_hidden_state
+
+        section_results = []
+
+        for section_data in embedder.section_offsets:
+            start_offset = section_data["start_offset"]
+            end_offset = section_data["end_offset"]
+            match section:
+                case ImageSection():
+                    section_results.append(ImageSectionResult())
+                case CaptionSection():
+                    section_final_state = final_hidden_state[:, start_offset:end_offset, :]
+                    section_results.append(CaptionSectionResult(
+                        section_logits=self.auto_model.lm_head(section_final_state)
+                    ))
+
+        return section_results
+
+class SectionEmbedder:
+    def __init__(self):
+        self.embeddings = []
+        self.current_sequence_offset = 0
+        self.section_offsets = []
+        self.current_section_start_offset = 0
+
+    def start_section(self):
+        self.current_section_start_offset = self.current_sequence_offset
+
+    def add(self, embeddings):
+        self.embeddings.append(embeddings)
+        self.current_sequence_offset += embeddings.shape[1]
+
+    def end_section(self, section):
+        self.section_offsets.append({
+            "section": section,
+            "start_offset": self.current_section_start_offset,
+            "end_offset": self.current_sequence_offset,
+        })
+
+class ImageCaptioningModelV2Config(ModuleConfig):
+    tokens_per_image: int
+    freeze_image_weights: bool
+
+class ImageCaptioningModelV2(ModelBase):
+    def __init__(self, model_name: str, config: ImageCaptioningModelV2Config):
+        super().__init__(model_name=model_name, config=config)
+        self.config = config
+
+        self.multi_modal_model: QwenMultiModalModel = QwenMultiModalModel(QwenMultiModalModelConfig(
+            freeze_visual_model=self.config.freeze_image_weights,
+        ))
+
+    def collate(self, dataset_batch) -> dict[str, Section]:
+        # Assume we've preprocessed the dataset to have a single caption and single image
+
+        images = [item["image"] for item in dataset_batch]
+        image_section = self.multi_modal_model.preprocess_images(images)
+
+        captions = [item["caption"] for item in dataset_batch]
+        caption_section = self.multi_modal_model.preprocess_captions(captions)
+
+        return {
+            "image": image_section,
+            "caption": caption_section,
+        }
+
+    def forward(self, collated_batch) -> CaptionSectionResult:
+        section_results = self.multi_modal_model([
+            collated_batch["image"],
+            collated_batch["caption"],
+        ])
+        return section_results[1]
+
+    @property
+    def padding_token_id(self):
+        return self.multi_modal_model.padding_token_id
+
+    def generate_caption(self, image) -> str:
+        collated_batch = self.collate([{"image": image, "caption": ""}])
+        output_token_ids = []
+
+        max_generated_caption_length = 128 # Avoid possible infinite loops
+        is_truncated = False
+
+        for i in range(max_generated_caption_length):
+            caption_logits = self.forward(collated_batch)
+            next_token_logits = caption_logits[0, i, :] # batch_index 0, sequence_index 1, take each token logit
+            next_token_id = next_token_logits.argmax().item()
+            # probabilities = next_token_logits.softmax(dim=-1)
+            # next_token_id = torch.searchsorted(probabilities.cumsum(0), torch.rand(1)).item()
+            if next_token_id == self.multi_modal_model.end_section_token_id:
+                break
+            else:
+                output_token_ids.append(next_token_id)
+        else:
+            is_truncated = True
+
+        output = self.multi_modal_model.token_ids_to_text(output_token_ids)
+        if is_truncated:
+            output += " [TRUNCATED]"
+
+        return output
+
 class ImageCaptioningModelConfig(ModuleConfig):
     embedding_dimension: int
     max_tokens_per_caption: int
@@ -226,9 +481,8 @@ class ImageCaptioningModel(ModelBase):
         self.image_encoder: ImageEncoder = ClipImageEncoder(ClipImageEncoderConfig(
             model_embedding_dimension = self.config.embedding_dimension,
             tokens_per_image = self.config.tokens_per_image,
+            freeze_visual_model= self.config.freeze_image_weights,
         ))
-        if self.config.freeze_image_weights:
-            self.image_encoder.requires_grad_(False)
         self.text_model: TextModel = BertTextModel(BertTextModelConfig(
             model_embedding_dimension = self.config.embedding_dimension,
         ))

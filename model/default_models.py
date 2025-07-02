@@ -13,11 +13,25 @@ from typing import Optional, Self
 from .common import ModelBase, ModuleConfig, TrainingConfig, Field
 from .modules.encoder import EncoderBlockConfig, ImageEncoder, ImageEncoderConfig
 from .modules.decoder import DecoderBlockConfig, DecoderBlock
-from .models import ImageCaptioningModel, ImageCaptioningModelConfig
-from .trainer import ModelTrainerBase, ImageCaptioningTrainer, ImageCaptioningTrainingConfig
+from .models import ImageCaptioningModel, ImageCaptioningModelConfig, ImageCaptioningModelV2, ImageCaptioningModelV2Config
+from .trainer import ModelTrainerBase, ImageCaptioningTrainer, ImageCaptioningTrainingConfig, ImageCaptioningV2Trainer, ImageCaptioningV2TrainingConfig
 from .wandb_config import WANDB_ENTITY, WANDB_PROJECT_NAME
 
 DEFAULT_MODEL_PARAMETERS = {
+    "qwen-base-captioner-v1": {
+        "model_class": ImageCaptioningModelV2,
+        "model": ImageCaptioningModelV2Config(
+            tokens_per_image=1,  # CLIP encoder encodes to a 512 dimensional vector already
+            freeze_image_weights=True,
+        ),
+        "model_trainer": ImageCaptioningV2Trainer,
+        "training": ImageCaptioningV2TrainingConfig(
+            batch_size=128,
+            epochs=10,
+            learning_rate=0.001,
+            optimizer="adamw",
+        ),
+    },
     "image-captioner-v1-rope": {
         "model_class": ImageCaptioningModel,
         "model": ImageCaptioningModelConfig(
@@ -73,14 +87,6 @@ DEFAULT_MODEL_PARAMETERS = {
         ),
     },
 }
-
-# MultiModalModel:
-# (llm: "bert-text-custom-decoder" + image: "clip")
-# (llm: "qwen" + image: "clip")
-# Interface:
-# * preprocess_images(images) -> ImagesSection
-# * preprocess_text(texts) -> TextSection
-# * forward(sections) -> [SectionResult]
 
 DEFAULT_MODEL_NAME=list(DEFAULT_MODEL_PARAMETERS.keys())[0]
 
