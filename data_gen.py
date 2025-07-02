@@ -5,9 +5,15 @@ import torch, os
 from qwen_vl_utils import process_vision_info
 
 # Load the first 1000 images from flickr30k
+SIZE_TO_LOAD = 10
 
 data_folder = os.path.join(os.path.dirname(__file__), "model/datasets")
-dataset = load_dataset("nlphuji/flickr30k", split="test[:1000]", data_dir=data_folder)
+dataset = load_dataset(
+    "nlphuji/flickr30k",
+    split=f"test[:{SIZE_TO_LOAD}]",
+    data_dir=data_folder,
+    token=True, # Force logging in for later even though it's not required
+)
 
 # Load Qwen2.5-VL-3B-Instruct model and processor
 model_name = "Qwen/Qwen2.5-VL-3B-Instruct"
@@ -59,7 +65,10 @@ pirate_dataset = dataset.map(
 )
 
 # Save locally
-pirate_dataset.save_to_disk("flickr30k_pirate_captions")
+# pirate_dataset.save_to_disk("flickr30k_pirate_captions")
 
 # Optionally, push to the Hub
-# pirate_dataset.push_to_hub("your-username/flickr30k-pirate-captions")
+pirate_dataset.push_to_hub(
+    "david-edey/flickr30k-pirate-captions-test",
+    private=True,
+)
