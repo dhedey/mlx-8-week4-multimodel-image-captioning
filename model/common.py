@@ -115,6 +115,7 @@ class TrainerOverrides(PersistableData):
     override_batch_size: Optional[int] = None
     override_to_epoch: Optional[int] = None
     override_learning_rate: Optional[float] = None
+    print_after_batches: Optional[int] = None
     validate_after_epochs: int = 1
     seed: int = 42
     use_dataset_cache: bool = True
@@ -377,6 +378,10 @@ class ModelTrainerBase:
         if overrides.override_learning_rate is not None:
             print(f"Overriding learning rate to {overrides.override_learning_rate}")
             self.config.learning_rate = overrides.override_learning_rate
+
+        if overrides.print_after_batches is not None:
+            print(f"Overriding print after batches to {overrides.print_after_batches}")
+            self.config.print_after_batches = overrides.print_after_batches
 
         self.optimizer = create_optimizer(self.model, self.config.optimizer, self.config.optimizer_params, self.config.learning_rate)
 

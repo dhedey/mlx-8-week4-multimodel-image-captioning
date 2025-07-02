@@ -43,6 +43,12 @@ if __name__ == "__main__":
         help="Set a random seed for reproducibility (default: 42)",
     )
     parser.add_argument(
+        '--print-after-batches',
+        type=int,
+        default=None,
+        help="Print a log message after N batches (default: None, uses model default)",
+    )
+    parser.add_argument(
         '--validate-after-epochs',
         type=int,
         default=1,
@@ -116,6 +122,7 @@ if __name__ == "__main__":
         override_batch_size=args.batch_size,
         override_learning_rate=args.learning_rate,
         validate_after_epochs=args.validate_after_epochs,
+        print_after_batches=args.print_after_batches,
         seed=args.seed,
         use_dataset_cache=not args.ignore_dataset_cache,
     )
