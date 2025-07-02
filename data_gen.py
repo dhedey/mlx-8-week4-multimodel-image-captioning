@@ -12,7 +12,6 @@ dataset = load_dataset(
     "nlphuji/flickr30k",
     split=f"test[:{SIZE_TO_LOAD}]",
     data_dir=data_folder,
-    token=True, # Force logging in for later even though it's not required
 )
 
 # Load Qwen2.5-VL-3B-Instruct model and processor
