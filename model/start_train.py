@@ -16,6 +16,40 @@ if __name__ == "__main__":
         default=DEFAULT_MODEL_NAME,
     )
     parser.add_argument(
+        '--end-epoch',
+        type=int,
+        default=None,
+        help='Override number of epochs'
+    )
+    parser.add_argument(
+        '--batch-size',
+        type=int,
+        default=None,
+        help='Override batch size for training (default: None, uses model default)'
+    )
+    parser.add_argument(
+        '--learning-rate',
+        type=float,
+        default=None,
+        help='Override the default learning rate for training (default: None, uses model default)'
+    )
+    parser.add_argument(
+        '--ignore-dataset-cache',
+        action='store_true',
+    )
+    parser.add_argument(
+        '--seed',
+        type=int,
+        default=42,
+        help="Set a random seed for reproducibility (default: 42)",
+    )
+    parser.add_argument(
+        '--validate-after-epochs',
+        type=int,
+        default=1,
+        default="Run validation after every N epochs (default: 1)",
+    )
+    parser.add_argument(
         '--early-stopping',
         action='store_true',
         help='Enable early stopping during training'
@@ -39,12 +73,6 @@ if __name__ == "__main__":
         '--no-upload-artifacts',
         action='store_true',
         help='Disable artifact uploading to W&B (if wandb is enabled)'
-    )
-    parser.add_argument(
-        '--end-epoch',
-        type=int,
-        default=None,
-        help='set number of epochs'
     )
     
     args = parser.parse_args()
@@ -79,6 +107,11 @@ if __name__ == "__main__":
     overrides = TrainerOverrides(
         print_detailed_parameter_counts=True,
         override_to_epoch=args.end_epoch,
+        override_batch_size=args.batch_size,
+        override_learning_rate=args.learning_rate,
+        validate_after_epochs=args.validate_after_epochs,
+        seed=args.seed,
+        use_dataset_cache=not args.ignore_dataset_cache,
     )
     trainer = parameters["model_trainer"](
         model=model,

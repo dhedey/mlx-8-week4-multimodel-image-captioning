@@ -18,16 +18,19 @@ if __name__ == "__main__":
         '--end-epoch',
         type=int,
         default=None,
+        help='Override number of epochs'
     )
     parser.add_argument(
-        '--early-stopping',
-        action='store_true',
-        help='Enable early stopping during training'
+        '--batch-size',
+        type=int,
+        default=None,
+        help='Override batch size for training (default: None, uses model default)'
     )
     parser.add_argument(
         '--learning-rate',
         type=float,
         default=None,
+        help='Override the default learning rate for training (default: None, uses model default)'
     )
     parser.add_argument(
         '--ignore-dataset-cache',
@@ -36,6 +39,14 @@ if __name__ == "__main__":
     parser.add_argument(
         '--seed',
         type=int,
+        default=42,
+        help="Set a random seed for reproducibility (default: 42)",
+    )
+    parser.add_argument(
+        '--validate-after-epochs',
+        type=int,
+        default=1,
+        default="Run validation after every N epochs (default: 1)",
     )
     parser.add_argument(
         '--immediate-validation',
@@ -43,9 +54,9 @@ if __name__ == "__main__":
         help='Run validation immediately after loading the model'
     )
     parser.add_argument(
-        '--validate-after-epochs',
-        type=int,
-        default=1,
+        '--early-stopping',
+        action='store_true',
+        help='Enable early stopping during training'
     )
     parser.add_argument(
         '--wandb',
@@ -102,6 +113,7 @@ if __name__ == "__main__":
 
     overrides = TrainerOverrides(
         override_to_epoch=args.end_epoch,
+        override_batch_size=args.batch_size,
         override_learning_rate=args.learning_rate,
         validate_after_epochs=args.validate_after_epochs,
         seed=args.seed,

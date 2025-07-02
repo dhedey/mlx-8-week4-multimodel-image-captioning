@@ -112,6 +112,7 @@ class TrainingState(PersistableData):
     scheduler_state: Optional[dict] = None # None to support backwards compatibility
 
 class TrainerOverrides(PersistableData):
+    override_batch_size: Optional[int] = None
     override_to_epoch: Optional[int] = None
     override_learning_rate: Optional[float] = None
     validate_after_epochs: int = 1
@@ -368,6 +369,10 @@ class ModelTrainerBase:
         if overrides.override_to_epoch is not None:
             self.config.epochs = overrides.override_to_epoch
             print(f"Overriding training end epoch to {self.config.epochs}")
+        
+        if overrides.override_batch_size is not None:
+            self.config.batch_size = overrides.override_batch_size
+            print(f"Overriding batch size to {self.config.batch_size}")
 
         if overrides.override_learning_rate is not None:
             print(f"Overriding learning rate to {overrides.override_learning_rate}")
