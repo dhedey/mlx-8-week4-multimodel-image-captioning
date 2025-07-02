@@ -247,8 +247,8 @@ class QwenMultiModalModel(nn.Module):
         self.config = config
 
         self.tokenizer: transformers.Qwen2TokenizerFast = transformers.AutoTokenizer.from_pretrained(model_name)
-        self.auto_model: transformers.AutoModelForCausalLM = transformers.AutoModelForCausalLM.from_pretrained(model_name)
-        self.qwen_model: transformers.Qwen3Model = self.auto_model.model
+        self.auto_model: transformers.Qwen2ForCausalLM = transformers.AutoModelForCausalLM.from_pretrained(model_name)
+        self.qwen_model: transformers.Qwen2Model = self.auto_model.model
 
         # Enable LORA on the Qwen model. get_peft_model actually changes it in-place
         lora_config = LoraConfig(
@@ -446,6 +446,8 @@ class ImageCaptioningModelV2(ModelBase):
 
     def generate_caption(self, image) -> str:
         collated_batch = self.collate([{"image": image, "caption": ""}])
+        caption_section: CaptionSection = collated_batch["caption"]
+        caption_section.section_token_ids = caption_section.section_token_ids[:, 0:2] # Start with <|im_start|> <|caption|>
         output_token_ids = []
 
         max_generated_caption_length = 50 # Avoid possible infinite loops
