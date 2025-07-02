@@ -45,7 +45,7 @@ def pirate_caption(example):
     inputs = inputs.to(model.device)
 
     with torch.no_grad():
-        output = model.generate(**inputs, max_new_tokens=64)
+        output = model.generate(**inputs, max_new_tokens=64, temperature=0.8, do_sample=True)
     caption = processor.batch_decode(output, skip_special_tokens=True)[0]
     example["caption"] = caption
     print(f"Generated caption: {caption}")
