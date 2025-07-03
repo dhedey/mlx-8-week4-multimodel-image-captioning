@@ -246,6 +246,10 @@ class QwenMultiModalModel(nn.Module):
 
         self.config = config
 
+        # Avoids an annoying error message, and the rust tokenizer is so fast that it's
+        # fine not to parallelize. See https://stackoverflow.com/questions/62691279/how-to-disable-tokenizers-parallelism-true-false-warning
+        os.environ["TOKENIZERS_PARALLELISM"] = "false"
+
         self.tokenizer: transformers.Qwen2TokenizerFast = transformers.AutoTokenizer.from_pretrained(model_name)
         self.auto_model: transformers.Qwen2ForCausalLM = transformers.AutoModelForCausalLM.from_pretrained(model_name)
         self.qwen_model: transformers.Qwen2Model = self.auto_model.model
@@ -269,18 +273,38 @@ class QwenMultiModalModel(nn.Module):
         # > Base model: Present in vocab, but not used for chat structure by default.
         # > <|endoftext|>: Used by both.
 
-        # Let's use the following structure:
+        # Let's use the following structure
         # <|im_start|><|image|>   ... <|im_end|>
         # <|im_start|><|caption|> ... <|im_end|>
 
         # Add custom tokens
         self.tokenizer.add_tokens(["<|image|>", "<|caption|>"], special_tokens=True)
+        # Note - There is some special weight-tying in the auto-model/qwen-model, meaning
+        # the lm_head decoder has its weights tied encoder's embeddings, and this resizes both.
+        self.qwen_model.resize_token_embeddings(len(self.tokenizer))
+        assert self.qwen_model.embed_tokens.weight.shape[0] == len(self.tokenizer)
+        assert self.auto_model.lm_head.weight.shape[0] == len(self.tokenizer)
+
         self.image_token_id = self.tokenizer.convert_tokens_to_ids("<|image|>")
         self.caption_token_id = self.tokenizer.convert_tokens_to_ids("<|caption|>")
         self.start_section_token_id = self.tokenizer.convert_tokens_to_ids("<|im_start|>")
         self.end_section_token_id = self.tokenizer.convert_tokens_to_ids("<|im_end|>")
         self.padding_token_id = self.tokenizer.pad_token_id
-        self.qwen_model.resize_token_embeddings(len(self.tokenizer))
+        special_tokens = {
+            "<|pad|>": self.padding_token_id,
+            "<|section_start|>": self.start_section_token_id,
+            "<|section_end|>": self.end_section_token_id,
+            "<|image|>": self.image_token_id,
+            "<|caption|>": self.caption_token_id,
+        }
+        print(f"Special token ids: {special_tokens}")
+
+        self.set_some_token_embeddings_trainable([
+            self.image_token_id,
+            self.caption_token_id,
+            self.start_section_token_id,
+            self.end_section_token_id,
+        ])
 
         self.embedding_dimension = self.qwen_model.config.hidden_size
 
@@ -290,14 +314,23 @@ class QwenMultiModalModel(nn.Module):
             freeze_visual_model=self.config.freeze_visual_model,
         ))
 
-        special_tokens = {
-            "<|pad|>": self.padding_token_id,
-            "<|section_start|>": self.start_section_token_id,
-            "<|section_end|>": self.end_section_token_id,
-            "<|image|>": self.image_token_id,
-            "<|caption|>": self.caption_token_id,
-        }
-        print(f"Special token ids: {special_tokens}")
+    def set_some_token_embeddings_trainable(self, trainable_token_ids) -> None:
+        # Allow the model to learn (just) these embeddings
+        # See this stack overflow post: https://stackoverflow.com/a/79621033
+        # This should hopefully allow for predicting the end of section tokens at the end of captions
+
+        # I don't quite know how the auto-tying logic works, so I'll just apply masking to both
+        self.qwen_model.embed_tokens.requires_grad_(True)
+        self.auto_model.lm_head.requires_grad_(True)
+
+        @torch.utils.hooks.unserializable_hook
+        def mask_embedding_gradients(grad):
+            mask = torch.zeros_like(grad)
+            mask[trainable_token_ids] = 1.0
+            return grad * mask
+
+        self.qwen_model.embed_tokens.weight.register_hook(mask_embedding_gradients)
+        self.auto_model.lm_head.weight.register_hook(mask_embedding_gradients)
 
     def preprocess_images(self, images) -> ImageSection:
         return ImageSection(
