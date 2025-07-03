@@ -23,6 +23,7 @@ class QwenMultiModalModelConfig(ModuleConfig):
     freeze_visual_model: bool
     freeze_new_special_token_embeddings: bool = False
     apply_lora_to_mlp_layers: bool = False
+    apply_lora_to_lm_head_layer: bool = False
 
 class QwenMultiModalModel(MultiModalModel):
     def __init__(self, config: QwenMultiModalModelConfig):
@@ -40,9 +41,15 @@ class QwenMultiModalModel(MultiModalModel):
         self.qwen_model: transformers.Qwen2Model = self.auto_model.model
 
         # Enable LORA on the Qwen model. get_peft_model actually changes it in-place
+        lora_target_modules = ["q_proj", "v_proj"]
+        if config.apply_lora_to_mlp_layers:
+            lora_target_modules.append("mlp.up_proj")
+            lora_target_modules.append("mlp.down_proj")
+        if config.apply_lora_to_lm_head_layer:
+            lora_target_modules.append("lm_head")
         lora_config = LoraConfig(
             r=16,
-            target_modules=["mlp.up_proj", "mlp.down_proj", "q_proj", "v_proj"] if config.apply_lora_to_mlp_layers else ["q_proj", "v_proj"],
+            target_modules=lora_target_modules,
             task_type=TaskType.CAUSAL_LM,
             lora_alpha=32,
             lora_dropout=0.05
