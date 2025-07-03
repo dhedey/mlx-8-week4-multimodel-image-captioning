@@ -21,6 +21,7 @@ from ..common import ModuleConfig
 
 class QwenMultiModalModelConfig(ModuleConfig):
     freeze_visual_model: bool
+    freeze_new_special_token_embeddings: bool = False
 
 class QwenMultiModalModel(MultiModalModel):
     def __init__(self, config: QwenMultiModalModelConfig):
@@ -77,12 +78,13 @@ class QwenMultiModalModel(MultiModalModel):
         )
         print(f"Special token ids: {self._special_token_ids}")
 
-        self.set_some_token_embeddings_trainable([
-            self._special_token_ids.image,
-            self._special_token_ids.caption,
-            self._special_token_ids.section_start,
-            self._special_token_ids.section_end,
-        ])
+        if not config.freeze_new_special_token_embeddings:
+            self.set_some_token_embeddings_trainable([
+                self._special_token_ids.image,
+                self._special_token_ids.caption,
+                self._special_token_ids.section_start,
+                self._special_token_ids.section_end,
+            ])
 
         self.embedding_dimension: int = self.qwen_model.config.hidden_size
 

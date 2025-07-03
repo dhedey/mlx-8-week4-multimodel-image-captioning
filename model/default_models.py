@@ -12,6 +12,7 @@ DEFAULT_MODEL_PARAMETERS = {
         "model": ImageCaptioningModelConfig(
             model=QwenMultiModalModelConfig(
                 freeze_visual_model=True,
+                freeze_new_special_token_embeddings=True,
             )
         ),
         "model_trainer": ImageCaptioningModelTrainer,
@@ -31,6 +32,7 @@ DEFAULT_MODEL_PARAMETERS = {
         "model": ImageCaptioningModelConfig(
             model = QwenMultiModalModelConfig(
                 freeze_visual_model=True,
+                freeze_new_special_token_embeddings=True,
             )
         ),
         "model_trainer": ImageCaptioningModelTrainer,
