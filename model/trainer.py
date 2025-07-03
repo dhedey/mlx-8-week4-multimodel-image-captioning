@@ -90,7 +90,7 @@ class ImageCaptioningModelTrainer(ModelTrainerBase):
             expected_token_ids,
         )
 
-        total_non_padding_predictions = (expected_token_ids != self.model.padding_token_id).sum().item()
+        total_non_padding_predictions = (expected_token_ids != self.model.special_token_ids.padding).sum().item()
 
         return BatchResults(
             total_loss=loss,
