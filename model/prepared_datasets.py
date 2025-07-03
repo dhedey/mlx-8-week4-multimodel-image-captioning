@@ -37,10 +37,10 @@ def generate_image_caption_datasets(dataset_kind = "standard"):
                 split="test",
             )
         case "pirate":
-            print("Need to login so that you can have access to the private dataset")
-            print("Visit https://huggingface.co/settings/tokens to get a token")
+            print("You may need to login so that you can have access to the private dataset.")
+            print("If so, visit https://huggingface.co/settings/tokens to get a token (and you may need to uncomment this line below)")
             print()
-            huggingface_hub.login()
+            # huggingface_hub.login()
             ds = datasets.load_dataset(
                 "david-edey/flickr30k-pirate-captions",
                 cache_dir=data_folder,
