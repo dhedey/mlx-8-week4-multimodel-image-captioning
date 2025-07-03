@@ -33,18 +33,19 @@ def generate_image_caption_datasets(dataset_kind = "standard"):
             # The dataset is improperly pre-split, and just has a train partition. Use that.
             ds = datasets.load_dataset(
                 "nlphuji/flickr30k",
-                data_dir=data_folder,
+                cache_dir=data_folder,
                 split="test",
             )
         case "pirate":
             print("Need to login so that you can have access to the private dataset")
             print("Visit https://huggingface.co/settings/tokens to get a token")
+            print()
             huggingface_hub.login()
             ds = datasets.load_dataset(
                 "david-edey/flickr30k-pirate-captions",
-                data_dir=data_folder,
-                split="test",
+                cache_dir=data_folder,
                 token=True,
+                split="test",
             )
         case _:
             raise ValueError(f"Unknown dataset kind: {dataset_kind}")

@@ -55,15 +55,12 @@ class ImageCaptioningModelTrainer(ModelTrainerBase):
         print()
 
     def create_dataloader(self, dataset, batch_size, num_workers, collate_fn):
-        device = self.model.get_device()
-        pin_memory = device == 'cuda'
         return torch.utils.data.DataLoader(
             dataset,
             batch_size=batch_size,
             shuffle=True,
             num_workers=num_workers,
-            pin_memory=pin_memory,  # Speed up CUDA
-            pin_memory_device=device,
+            pin_memory=self.model.get_device() == 'cuda', 
             collate_fn=collate_fn
         )
 
