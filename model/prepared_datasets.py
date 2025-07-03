@@ -22,9 +22,9 @@ def flickr30k_take_first_caption(dataset_batch):
                 # Find the last '.' before position MAX_CAPTION_LENGTH
                 cut_pos = caption.rfind('.', 0, MAX_CAPTION_LENGTH)
                 if cut_pos != -1:
-                    result = caption[:cut_pos]
+                    caption = caption[:cut_pos]
                 else:
-                    result = caption[:MAX_CAPTION_LENGTH] # fallback if no '.' found
+                    caption = caption[:MAX_CAPTION_LENGTH] # fallback if no '.' found
 
             captions.append(caption)
             images.append(image)

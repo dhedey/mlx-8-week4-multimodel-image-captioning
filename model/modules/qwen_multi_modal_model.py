@@ -134,8 +134,7 @@ class QwenMultiModalModel(MultiModalModel):
         return self.tokenizer.decode(token_ids, skip_special_tokens=True)
 
     def embed_token_ids(self, token_ids: torch.Tensor) -> torch.Tensor:
-        if token_ids.device != self.qwen_model.device:
-            token_ids = token_ids.to(self.qwen_model.device)
+        token_ids = token_ids.to(self.qwen_model.device)
         return self.qwen_model.embed_tokens(token_ids)
 
     def unembed_to_token_id_logits(self, hidden_state: torch.Tensor) -> torch.Tensor:
