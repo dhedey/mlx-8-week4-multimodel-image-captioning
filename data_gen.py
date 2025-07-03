@@ -7,8 +7,7 @@ from huggingface_hub import login
 
 login()
 
-# Load the first 1000 images from flickr30k
-SIZE_TO_LOAD = 10
+SIZE_TO_LOAD = 1000
 
 data_folder = os.path.join(os.path.dirname(__file__), "model/datasets")
 dataset = load_dataset(
@@ -33,7 +32,7 @@ def pirate_caption(example):
                     "type": "image",
                     "image": example["image"],
                 },
-                {"type": "text", "text": "Provide a short english description in the style of a pirate of this image. No more than 60 words. Don't always start with Arr."},
+                {"type": "text", "text": "Provide a short (less than 60 words) english description of this image in the style of a pirate."},
             ],
         }
     ]
@@ -53,7 +52,7 @@ def pirate_caption(example):
     inputs = inputs.to(model.device)
 
     with torch.no_grad():
-        output = model.generate(**inputs, max_new_tokens=256, temperature=0.3, do_sample=True)
+        output = model.generate(**inputs, max_new_tokens=256, temperature=0.4, do_sample=True)
     caption = processor.batch_decode(output, skip_special_tokens=True)[0].split("assistant")[-1].strip()
     example["caption"] = [caption]
     example["sentids"] = ["-1"]
@@ -72,7 +71,7 @@ pirate_dataset = dataset.map(
 
 # Optionally, push to the Hub
 pirate_dataset.push_to_hub(
-    "david-edey/flickr30k-pirate-captions-test",
+    "david-edey/flickr30k-pirate-captions",
     split="test",
     private=True,
 )
