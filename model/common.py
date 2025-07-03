@@ -1,3 +1,4 @@
+from collections import OrderedDict
 from dataclasses import dataclass
 import torch.optim as optim
 import torch.nn as nn
@@ -39,6 +40,7 @@ class TrainingConfig(PersistableData):
     batch_size: int
     epochs: int
     learning_rate: float
+    save_only_grad_weights: bool = True
     warmup_epochs: int = 0 # Number of epochs to warm up the learning rate
     print_after_batches: int = 10
     batch_limit: Optional[int] = None
@@ -111,7 +113,7 @@ class TrainingState(PersistableData):
     all_validation_results: list[ValidationResults] = Field(default_factory=list) # Default to support backwards compatibility
     scheduler_state: Optional[dict] = None # None to support backwards compatibility
 
-class TrainerOverrides(PersistableData):
+class TrainingOverrides(PersistableData):
     override_batch_size: Optional[int] = None
     override_batch_limit: Optional[int] = None
     override_to_epoch: Optional[int] = None
@@ -173,11 +175,19 @@ class ModelBase(nn.Module):
         model_path = ModelBase.model_path(file_name)
         pathlib.Path(os.path.dirname(model_path)).mkdir(parents=True, exist_ok=True)
 
+        if training_config.save_only_grad_weights:
+            model_weights = OrderedDict()
+            for name, param in self.named_parameters():
+                if param.requires_grad:
+                    model_weights[name] = param
+        else:
+            model_weights = self.state_dict()
+
         torch.save({
             "model": {
                 "class_name": type(self).__name__,
                 "model_name": self.model_name,
-                "weights": self.state_dict(),
+                "weights": model_weights,
                 "config": self.config.to_dict(),
             },
             "training": {
@@ -186,8 +196,28 @@ class ModelBase(nn.Module):
             },
         }, model_path)
 
-        print(f"Model saved to {model_path}")
+        print(f"Model saved to {model_path} (save_only_grad_weights={training_config.save_only_grad_weights})")
+
+    @classmethod
+    def exists(
+        cls,
+        model_name: Optional[str] = None,
+        model_path: Optional[str] = None,
+    ) -> bool:
+        return os.path.exists(cls.resolve_path(model_name=model_name, model_path=model_path))
     
+    @classmethod
+    def resolve_path(
+        cls,
+        model_name: Optional[str] = None,
+        model_path: Optional[str] = None,
+    ) -> str:
+        if model_path is not None:
+            return model_path
+        if model_name is not None:
+            return ModelBase.model_path(model_name)
+        raise ValueError("Either model_name or model_path must be provided to load a model.")
+
     @classmethod
     def load_advanced(
         cls,
@@ -227,13 +257,16 @@ class ModelBase(nn.Module):
         training_state = TrainingState.from_dict(loaded_model_data["training"]["state"])
         training_config = loaded_model_data["training"]["config"]
 
-        model = model_class(
+        model: ModelBase = model_class(
             model_name=model_name,
             config=model_config,
         )
-        model.load_state_dict(model_weights)
-        model.to(device)
-        return model, training_state, training_config
+        if training_config.get("save_only_grad_weights", False):
+            model.load_state_dict(model_weights, strict=False)
+        else:
+            model.load_state_dict(model_weights)
+
+        return model.to(device), training_state, training_config
 
     @classmethod
     def load_for_evaluation(cls, model_name: Optional[str] = None, model_path: Optional[str] = None, device: Optional[str] = None) -> Self:
@@ -348,7 +381,7 @@ class ModelTrainerBase:
             model: ModelBase,
             config: TrainingConfig,
             continuation: Optional[TrainingState] = None,
-            overrides: Optional[TrainerOverrides] = None,
+            overrides: Optional[TrainingOverrides] = None,
         ):
 
         self.model = model
@@ -359,7 +392,7 @@ class ModelTrainerBase:
         print(f"Initializing {self.__class__.__name__} for {model.__class__.__name__} named \"{model.model_name}\" (learnable weights = {learnable_weights_count:,} total weights = {total_weights_count:,})")
 
         if overrides is None:
-            overrides = TrainerOverrides()
+            overrides = TrainingOverrides()
 
         torch.manual_seed(overrides.seed)
 
@@ -431,7 +464,7 @@ class ModelTrainerBase:
         print()
 
     @classmethod
-    def load_with_model(cls, model_name: Optional[str] = None, overrides: Optional[TrainerOverrides] = None, device: Optional[str] = None, model_path: Optional[str] = None) -> Self:
+    def load_with_model(cls, model_name: Optional[str] = None, overrides: Optional[TrainingOverrides] = None, device: Optional[str] = None, model_path: Optional[str] = None) -> Self:
         model, state, config = ModelBase.load_advanced(model_name=model_name, device=device, model_path=model_path)
         return cls.load(
             model=model,
@@ -441,7 +474,7 @@ class ModelTrainerBase:
         )
 
     @classmethod
-    def load(cls, model: ModelBase, config: dict, state: TrainingState, overrides: Optional[TrainerOverrides] = None) -> Self:
+    def load(cls, model: ModelBase, config: dict, state: TrainingState, overrides: Optional[TrainingOverrides] = None) -> Self:
         trainer_class_name = state.model_trainer_class_name
 
         registered_types = ModelTrainerBase.registered_types

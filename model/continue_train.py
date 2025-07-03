@@ -2,7 +2,7 @@
 import argparse
 from .default_models import DEFAULT_MODEL_NAME
 from .wandb_config import WANDB_PROJECT_NAME, WANDB_ENTITY
-from .trainer import ModelTrainerBase, TrainerOverrides
+from .trainer import ModelTrainerBase, TrainingOverrides
 from .common import upload_model_artifact, ModelBase
 import wandb
 import os
@@ -123,7 +123,7 @@ if __name__ == "__main__":
     )
     args = parser.parse_args()
 
-    overrides = TrainerOverrides(
+    overrides = TrainingOverrides(
         override_to_epoch=args.end_epoch,
         override_batch_size=args.batch_size,
         override_batch_limit=args.batch_limit,

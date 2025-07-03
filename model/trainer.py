@@ -17,8 +17,7 @@ import os
 from typing import Optional
 import time
 
-from .common import TrainingState, TrainerOverrides, ModelTrainerBase, ModelBase, TrainingConfig, BatchResults, ValidationResults
-from .composite_dataset import CompositeDataset, DavidCompositeDataset, sequence_collate_fn, BesCombine
+from .common import TrainingState, TrainingOverrides, ModelTrainerBase, ModelBase, TrainingConfig, BatchResults, ValidationResults
 from .models import CaptionSection, CaptionSectionResult, ImageCaptioningModel, ImageCaptioningModel
 from .prepared_datasets import generate_image_caption_datasets, noop_collate
 
@@ -33,7 +32,7 @@ class ImageCaptioningModelTrainer(ModelTrainerBase):
             self,
             model: ImageCaptioningModel,
             config: ImageCaptioningModelTrainingConfig,
-            overrides: Optional[TrainerOverrides] = None,
+            overrides: Optional[TrainingOverrides] = None,
             continuation: Optional[TrainingState] = None,
         ):
         super().__init__(model=model, config=config, overrides=overrides, continuation=continuation)

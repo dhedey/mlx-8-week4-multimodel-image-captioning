@@ -12,7 +12,7 @@ import os
 
 from .models import DigitSequenceModel, DigitSequenceModelConfig, ImageEncoderConfig, SelfEncoderBlockConfig, DecoderBlockConfig
 from .trainer import DigitSequenceModelTrainer, DigitSequenceModelTrainingConfig
-from .common import select_device, TrainingConfig, TrainerOverrides, ModelBase, upload_model_artifact
+from .common import select_device, TrainingConfig, TrainingOverrides, ModelBase, upload_model_artifact
 
 from .default_models import WANDB_PROJECT_NAME
 

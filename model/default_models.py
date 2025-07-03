@@ -1,7 +1,10 @@
 from model.modules.bert_custom_multi_modal_model import BertMultiModalModelConfig
 from model.modules.qwen_multi_modal_model import QwenMultiModalModelConfig
 from .models import ImageCaptioningModel, ImageCaptioningModelConfig
-from .trainer import ModelTrainerBase, ImageCaptioningModelTrainer, ImageCaptioningModelTrainingConfig
+from .trainer import ImageCaptioningModelTrainer, ImageCaptioningModelTrainingConfig
+import torch
+
+has_cuda = torch.cuda.is_available()
 
 DEFAULT_MODEL_PARAMETERS = {
     "qwen-base-captioner-pirate": {
@@ -13,9 +16,12 @@ DEFAULT_MODEL_PARAMETERS = {
         ),
         "model_trainer": ImageCaptioningModelTrainer,
         "training": ImageCaptioningModelTrainingConfig(
-            batch_size=128,
+            # Note: This is a very small batch size for Qwen models, but it is necessary to fit in memory.
+            batch_size=8,
+            print_after_batches=5,
+            validation_max_print_examples=5 if has_cuda else 1,
             epochs=10,
-            learning_rate=0.001,
+            learning_rate=0.0005,
             optimizer="adamw",
             dataset_kind="pirate",
         ),
@@ -67,12 +73,30 @@ DEFAULT_MODEL_PARAMETERS = {
 DEFAULT_MODEL_NAME=list(DEFAULT_MODEL_PARAMETERS.keys())[0]
 
 if __name__ == "__main__":
-   for model_name, parameters in DEFAULT_MODEL_PARAMETERS.items():
+    import os
+    from PIL import Image
+    from .common import ModelBase, ModelTrainerBase, TrainingOverrides
+    example_image = Image.open(os.path.join(os.path.dirname(__file__), "example.jpg"))
+
+    for model_name, parameters in DEFAULT_MODEL_PARAMETERS.items():
         best_version = f"{model_name}-best"
+
+        if not ModelBase.exists(model_name=best_version):
+            print(f"Model {best_version} does not exist locally. Skipping.")
+            continue
+
         print(f"Loading Model: {best_version}")
 
-        trainer = ModelTrainerBase.load_with_model(best_version)
+        trainer = ModelTrainerBase.load_with_model(
+            best_version,
+        )
         print(f"Latest validation metrics: {trainer.latest_validation_results}")
+
+        model = trainer.model
+        if isinstance(model, ImageCaptioningModel):
+            print("Generating caption for example image:")
+            print(model.generate_caption(example_image))
+            print()
    
         print(f"Running model to check it's working...")
         trainer.run_validation()

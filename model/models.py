@@ -63,17 +63,17 @@ class ImageCaptioningModel(ModelBase):
     def padding_token_id(self) -> int:
         return self.multi_modal_model.special_token_ids.padding
 
-    def generate_caption(self, image) -> str:
+    def generate_caption(self, image, max_token_length: int = 100) -> str:
         collated_batch = self.collate([{"image": image, "caption": ""}])
         caption_section: CaptionSection = collated_batch["caption"]
         caption_section.section_token_ids = caption_section.section_token_ids[:, 0:2] # Start with <|im_start|> <|caption|>
         output_token_ids = []
 
-        max_generated_caption_length = 50 # Avoid possible infinite loops
+        max_token_length = 50 # Avoid possible infinite loops
         is_truncated = False
         end_section_token_id = self.multi_modal_model.special_token_ids.section_end
 
-        for i in range(max_generated_caption_length):
+        for i in range(max_token_length):
             result: CaptionSectionResult = self.forward(collated_batch)
             caption_logits = result.section_logits
             next_token_logits = caption_logits[0, i + 1, :] # batch_index 0, sequence_index 1, take each token logit

@@ -16,6 +16,16 @@ def flickr30k_take_first_caption(dataset_batch):
     images = []
     for image, image_captions in zip(dataset_batch["image"], dataset_batch["caption"]):
         for caption in image_captions:
+            MAX_CAPTION_LENGTH = 120
+
+            if len(caption) > MAX_CAPTION_LENGTH:
+                # Find the last '.' before position MAX_CAPTION_LENGTH
+                cut_pos = caption.rfind('.', 0, MAX_CAPTION_LENGTH)
+                if cut_pos != -1:
+                    result = caption[:cut_pos]
+                else:
+                    result = caption[:MAX_CAPTION_LENGTH] # fallback if no '.' found
+
             captions.append(caption)
             images.append(image)
             break  # Only use the first caption for each image for now to speed up epochs
