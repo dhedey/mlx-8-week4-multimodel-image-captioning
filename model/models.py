@@ -54,11 +54,13 @@ class ImageCaptioningModel(ModelBase):
         }
 
     def forward(self, collated_batch) -> CaptionSectionResult:
-        section_results = self.multi_modal_model([
+        section_results: MultiModalModelResult = self.multi_modal_model([
             collated_batch["image"],
             collated_batch["caption"],
         ])
-        return section_results[1]
+        result = section_results.sections[1]
+        assert isinstance(result, CaptionSectionResult) # Make PyCharm happy
+        return result
 
     @property
     def special_token_ids(self) -> SpecialTokenIds:
