@@ -81,6 +81,7 @@ class QwenMultiModalModel(MultiModalModel):
             # LoRA can be applied without causing issues when the model runs.
             # https://github.com/huggingface/peft/issues/2244#issuecomment-2511556202
             lora_target_modules.append("embed_tokens")
+            lora_target_modules.append("lm_head")
 
         self.peft_model = get_peft_model(
             self.auto_model,    
