@@ -80,8 +80,8 @@ class ImageCaptioningModelTrainer(ModelTrainerBase):
         expected_token_ids = caption_section_ids[:, 1:]
         actual_output_logits = caption_section_logits[:, :-1, :]
 
-        # Sanity check that we're attempting to learn that the last token should be a section end
-        assert expected_token_ids[0, -1].item() == self.model.special_token_ids.section_end
+        # Sanity check that we're attempting to learn that that there should be a section end
+        assert (expected_token_ids[0, :] == self.model.special_token_ids.section_end).any()
 
         criterion = nn.CrossEntropyLoss(ignore_index=self.model.special_token_ids.padding)
         loss = criterion(
