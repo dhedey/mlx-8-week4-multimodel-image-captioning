@@ -3,6 +3,9 @@ from transformers import AutoProcessor, AutoModelForVision2Seq
 from PIL import Image
 import torch, os
 from qwen_vl_utils import process_vision_info
+from huggingface_hub import login
+
+login()
 
 # Load the first 1000 images from flickr30k
 SIZE_TO_LOAD = 10
