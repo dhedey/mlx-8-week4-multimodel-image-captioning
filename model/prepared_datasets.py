@@ -11,19 +11,19 @@ def flickr30k_is_train(item) -> bool:
 def flickr30k_is_val(item) -> bool:
     return item["split"] != "train"
 
-def flickr30k_take_first_caption_truncated(dataset_batch, max_caption_length: int = 120):
+def flickr30k_take_first_caption_truncated_v2(dataset_batch, max_caption_length: int = 300):
     captions: list[str] = []
     images = []
     for image, image_captions in zip(dataset_batch["image"], dataset_batch["caption"]):
         for caption in image_captions:
             if len(caption) > max_caption_length:
                 # Find the last '.' before position max_caption_length
-                cut_pos = caption.rfind('.', 0, max_caption_length)
-                if cut_pos == -1:
-                    cut_pos = caption.rfind('!', 0, max_caption_length)
-                if cut_pos == -1:
-                    cut_pos = caption.rfind('?', 0, max_caption_length)
-                if cut_pos == -1:
+                cut_pos = caption.rfind('.', 0, max_caption_length - 1) + 1
+                if cut_pos == 0:
+                    cut_pos = caption.rfind('!', 0, max_caption_length - 1) + 1
+                if cut_pos == 0:
+                    cut_pos = caption.rfind('?', 0, max_caption_length - 1) + 1
+                if cut_pos == 0:
                     cut_pos = max_caption_length
                 caption = caption[:cut_pos]
 
@@ -63,8 +63,8 @@ def generate_image_caption_datasets(dataset_kind = "standard"):
 
 
     train_dataset = ds.filter(flickr30k_is_train)
-    train_dataset = train_dataset.map(flickr30k_take_first_caption_truncated, batched=True, remove_columns=ds.column_names)
+    train_dataset = train_dataset.map(flickr30k_take_first_caption_truncated_v2, batched=True, remove_columns=ds.column_names)
     eval_dataset = ds.filter(flickr30k_is_val)
-    eval_dataset = eval_dataset.map(flickr30k_take_first_caption_truncated, batched=True, remove_columns=ds.column_names)
+    eval_dataset = eval_dataset.map(flickr30k_take_first_caption_truncated_v2, batched=True, remove_columns=ds.column_names)
 
     return train_dataset, eval_dataset
