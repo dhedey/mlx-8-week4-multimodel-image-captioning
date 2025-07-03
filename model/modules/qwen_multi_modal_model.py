@@ -67,14 +67,6 @@ class QwenMultiModalModel(MultiModalModel):
         )
         print(f"Special token ids: {self._special_token_ids}")
 
-        if not config.freeze_new_special_token_embeddings:
-            self.set_some_token_embeddings_trainable([
-                self._special_token_ids.image,
-                self._special_token_ids.caption,
-                self._special_token_ids.section_start,
-                self._special_token_ids.section_end,
-            ])
-
         # Enable LORA on the Qwen model. get_peft_model actually changes it in-place
         # We have to change it after the lm_head is resized by adding new tokens, else it won't work.
         lora_target_modules = ["q_proj", "v_proj"]
@@ -83,17 +75,25 @@ class QwenMultiModalModel(MultiModalModel):
             lora_target_modules.append("mlp.down_proj")
         if config.apply_lora_to_lm_head_layer:
             lora_target_modules.append("lm_head")
-        lora_config = LoraConfig(
-            r=16,
-            target_modules=lora_target_modules,
-            task_type=TaskType.CAUSAL_LM,
-            lora_alpha=32,
-            lora_dropout=0.05
-        )
+
         self.peft_model = get_peft_model(
-            self.auto_model,
-            lora_config,
+            self.auto_model,    
+            LoraConfig(
+                r=16,
+                target_modules=lora_target_modules,
+                task_type=TaskType.CAUSAL_LM,
+                lora_alpha=32,
+                lora_dropout=0.05
+            ),
         )
+
+        if not config.freeze_new_special_token_embeddings:
+            self.set_some_token_embeddings_trainable([
+                self._special_token_ids.image,
+                self._special_token_ids.caption,
+                self._special_token_ids.section_start,
+                self._special_token_ids.section_end,
+            ])
 
         self.embedding_dimension: int = self.qwen_model.config.hidden_size
 
