@@ -1,7 +1,7 @@
 # Run as uv run -m model.continue_train
-# Run as uv run -m model.continue_train
 import argparse
-from .default_models import DEFAULT_MODEL_NAME, WANDB_PROJECT_NAME, WANDB_ENTITY
+from .default_models import DEFAULT_MODEL_NAME
+from .wandb_config import WANDB_PROJECT_NAME, WANDB_ENTITY
 from .trainer import ModelTrainerBase, TrainerOverrides
 from .common import upload_model_artifact, ModelBase
 import wandb
@@ -25,6 +25,12 @@ if __name__ == "__main__":
         type=int,
         default=None,
         help='Override batch size for training (default: None, uses model default)'
+    )
+    parser.add_argument(
+        '--batch-limit',
+        type=int,
+        default=None,
+        help='Override the batch count per epoch/validation (default: None, uses full batch)'
     )
     parser.add_argument(
         '--learning-rate',
@@ -120,6 +126,7 @@ if __name__ == "__main__":
     overrides = TrainerOverrides(
         override_to_epoch=args.end_epoch,
         override_batch_size=args.batch_size,
+        override_batch_limit=args.batch_limit,
         override_learning_rate=args.learning_rate,
         validate_after_epochs=args.validate_after_epochs,
         print_after_batches=args.print_after_batches,

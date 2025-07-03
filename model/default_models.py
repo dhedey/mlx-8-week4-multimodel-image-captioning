@@ -1,85 +1,43 @@
-import torch.nn.functional as F
-import torch.nn as nn
-import torch
-import re
-import os
-import statistics
-import transformers
-import random
-import einops
-import pandas as pd
-import math
-from typing import Optional, Self
-from .common import ModelBase, ModuleConfig, TrainingConfig, Field
-from .modules.encoder import EncoderBlockConfig, ImageEncoder, ImageEncoderConfig
-from .modules.decoder import DecoderBlockConfig, DecoderBlock
-from .models import ImageCaptioningModel, ImageCaptioningModelConfig, ImageCaptioningModelV2, ImageCaptioningModelV2Config
-from .trainer import ModelTrainerBase, ImageCaptioningTrainer, ImageCaptioningTrainingConfig, ImageCaptioningV2Trainer, ImageCaptioningV2TrainingConfig
-from .wandb_config import WANDB_ENTITY, WANDB_PROJECT_NAME
+from model.modules.bert_custom_multi_modal_model import BertMultiModalModelConfig
+from model.modules.qwen_multi_modal_model import QwenMultiModalModelConfig
+from .models import ImageCaptioningModel, ImageCaptioningModelConfig
+from .trainer import ModelTrainerBase, ImageCaptioningModelTrainer, ImageCaptioningModelTrainingConfig
 
 DEFAULT_MODEL_PARAMETERS = {
     "qwen-base-captioner-v1": {
-        "model_class": ImageCaptioningModelV2,
-        "model": ImageCaptioningModelV2Config(
-            tokens_per_image=1,  # CLIP encoder encodes to a 512 dimensional vector already
-            freeze_image_weights=True,
+        "model_class": ImageCaptioningModel,
+        "model": ImageCaptioningModelConfig(
+            model = QwenMultiModalModelConfig(
+                freeze_visual_model=True,
+            )
         ),
-        "model_trainer": ImageCaptioningV2Trainer,
-        "training": ImageCaptioningV2TrainingConfig(
+        "model_trainer": ImageCaptioningModelTrainer,
+        "training": ImageCaptioningModelTrainingConfig(
             batch_size=128,
             epochs=10,
             learning_rate=0.001,
             optimizer="adamw",
         ),
     },
-    "image-captioner-v1-rope": {
+    "custom-image-captioner-v1": {
         "model_class": ImageCaptioningModel,
         "model": ImageCaptioningModelConfig(
-            embedding_dimension = 256,
-            max_tokens_per_caption = 80,
-            tokens_per_image = 1, # CLIP encoder encodes to a 512 dimensional vector already
+            model = BertMultiModalModelConfig(
+                num_layers = 8,
+                heads_per_layer = 8,
+                attention_kq_dimension = 128,
+                attention_v_dimension = 128,
+                rope_enabled = True,
 
-            num_layers = 8,
-            heads_per_layer = 8,
-            attention_kq_dimension = 128,
-            attention_v_dimension = 128,
-            rope_enabled = True,
+                mlp_hidden_dimension = 256 * 4,
+                mlp_dropout = 0.2,
 
-            mlp_hidden_dimension = 256 * 4,
-            mlp_dropout = 0.2,
-
-            freeze_caption_weights = True,
-            freeze_image_weights = True,
+                freeze_bert_weights = True,
+                freeze_image_weights = True,
+            ),
         ),
-        "model_trainer": ImageCaptioningTrainer,
-        "training": ImageCaptioningTrainingConfig(
-            batch_size=128,
-            epochs=10,
-            learning_rate=0.001,
-            optimizer="adamw",
-        ),
-    },
-    "image-captioner-v1": {
-        "model_class": ImageCaptioningModel,
-        "model": ImageCaptioningModelConfig(
-            embedding_dimension=256,
-            max_tokens_per_caption=80,
-            tokens_per_image=1,  # CLIP encoder encodes to a 512 dimensional vector already
-
-            num_layers=8,
-            heads_per_layer=8,
-            attention_kq_dimension=128,
-            attention_v_dimension=128,
-            rope_enabled=False,
-
-            mlp_hidden_dimension=256 * 4,
-            mlp_dropout=0.2,
-
-            freeze_caption_weights=True,
-            freeze_image_weights=True,
-        ),
-        "model_trainer": ImageCaptioningTrainer,
-        "training": ImageCaptioningTrainingConfig(
+        "model_trainer": ImageCaptioningModelTrainer,
+        "training": ImageCaptioningModelTrainingConfig(
             batch_size=128,
             epochs=10,
             learning_rate=0.001,

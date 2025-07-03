@@ -16,7 +16,7 @@ class PersistableData(PydanticBaseModel):
         return self.model_dump()
     
     @classmethod
-    def from_dict(cls, d) -> Self:
+    def from_dict(cls, d: dict) -> Self:
         return cls(**d)
 
 class ModuleConfig(PersistableData):
@@ -41,7 +41,7 @@ class TrainingConfig(PersistableData):
     learning_rate: float
     warmup_epochs: int = 0 # Number of epochs to warm up the learning rate
     print_after_batches: int = 10
-    epoch_max_batches: Optional[int] = None
+    batch_limit: Optional[int] = None
     optimizer: str = "AdamW"
     """
     The optimizer to use for training.
@@ -113,6 +113,7 @@ class TrainingState(PersistableData):
 
 class TrainerOverrides(PersistableData):
     override_batch_size: Optional[int] = None
+    override_batch_limit: Optional[int] = None
     override_to_epoch: Optional[int] = None
     override_learning_rate: Optional[float] = None
     print_after_batches: Optional[int] = None
@@ -375,13 +376,17 @@ class ModelTrainerBase:
             self.config.batch_size = overrides.override_batch_size
             print(f"Overriding batch size to {self.config.batch_size}")
 
+        if overrides.override_batch_limit is not None:
+            self.config.batch_limit = overrides.override_batch_limit
+            print(f"Overriding batch limit to {self.config.batch_limit}")
+
         if overrides.override_learning_rate is not None:
-            print(f"Overriding learning rate to {overrides.override_learning_rate}")
             self.config.learning_rate = overrides.override_learning_rate
+            print(f"Overriding learning rate to {self.config.learning_rate}")
 
         if overrides.print_after_batches is not None:
-            print(f"Overriding print after batches to {overrides.print_after_batches}")
             self.config.print_after_batches = overrides.print_after_batches
+            print(f"Overriding print after batches to {self.config.print_after_batches}")
 
         self.optimizer = create_optimizer(self.model, self.config.optimizer, self.config.optimizer_params, self.config.learning_rate)
 
@@ -471,12 +476,12 @@ class ModelTrainerBase:
                     log_data = {
                         "epoch": self.epoch,
                     }
-                    def add_prefixed(data: dict, dict: dict, prefix: str):
-                        for key, value in dict.items():
+                    def add_prefixed(data: dict, new_data: dict, prefix: str):
+                        for key, value in new_data.items():
                             if key == "epoch":
                                 continue
                             if key.startswith(prefix):
-                                data[f"{prefix}{key}"] = value
+                                data[key] = value
                             else:
                                 data[f"{prefix}{key}"] = value
                     add_prefixed(log_data, self.latest_validation_results.to_dict(), "validation_")
@@ -527,8 +532,16 @@ class ModelTrainerBase:
         
         start_epoch_time_at = time.time()
 
-        print(f"> Starting training...")
+
+        if self.config.batch_limit is not None and total_batches >= self.config.batch_limit:
+            total_batches_text = f"{self.config.batch_limit:,} (limited from {total_batches:,} by config.batch_limit)"
+            total_batches = self.config.batch_limit
+        else:
+            total_batches_text = f"{total_batches:,}"
+
+        print(f"> Starting training... (batch_size={self.config.batch_size}, total_batches={total_batches_text})")
         print()
+
         epoch_loss = 0.0
         epoch_samples = 0
         for batch_idx, raw_batch in enumerate(train_data_loader):
@@ -546,18 +559,17 @@ class ModelTrainerBase:
 
             batch_num = batch_idx + 1
             if batch_num % print_every == 0 or batch_num == total_batches:
-                print(f"Epoch {self.epoch}, Batch {batch_num}/{total_batches}, Average Loss: {(running_loss / running_samples):.3g}")
+                print(f"Epoch {self.epoch}/{self.config.epochs}, Batch {batch_num}/{total_batches}, Recent Avg Loss: {(running_loss / running_samples):.3g}")
                 running_loss = 0.0
                 running_samples = 0
 
-            if self.config.epoch_max_batches is not None and batch_num >= self.config.epoch_max_batches:
-                print("Breaking early due to config.epoch_max_batches")
+            if batch_num == total_batches: # Handle self.config.batch_limit
                 break
 
         average_loss = epoch_loss / epoch_samples if epoch_samples > 0 else 0.0
         training_time = time.time() - start_epoch_time_at
         print()
-        print(f"Epoch training complete (Average Loss: {average_loss:.3g}, Time: {training_time:.1f}s)")
+        print(f"Epoch training complete (Epoch Avg Loss: {average_loss:.3g}, Time: {training_time:.1f}s)")
         print()
 
         if self.total_training_time_seconds is not None:

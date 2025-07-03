@@ -43,3 +43,18 @@ class DecoderBlock(nn.Module):
         residual_stream = self.ln_2(residual_stream)
         return residual_stream
 
+class DecoderLayersConfig(ModuleConfig):
+    decoder_layers: int
+    decoder_block_config: DecoderBlockConfig
+
+class DecoderLayers(nn.Module):
+    def __init__(self, config: DecoderLayersConfig):
+        super().__init__()
+        self.decoder_blocks = nn.ModuleList(
+            [DecoderBlock(config.decoder_block_config) for _ in range(config.decoder_layers)]
+        )
+
+    def forward(self, residual_stream) -> torch.Tensor:
+        for decoder in self.decoder_blocks:
+            residual_stream = decoder(residual_stream)
+        return residual_stream

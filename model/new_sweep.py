@@ -10,7 +10,7 @@ It provides more control over the sweep process compared to the CLI-based approa
 import wandb
 import os
 
-from .models import DigitSequenceModel, DigitSequenceModelConfig, ImageEncoderConfig, EncoderBlockConfig, DecoderBlockConfig
+from .models import DigitSequenceModel, DigitSequenceModelConfig, ImageEncoderConfig, SelfEncoderBlockConfig, DecoderBlockConfig
 from .trainer import DigitSequenceModelTrainer, DigitSequenceModelTrainingConfig
 from .common import select_device, TrainingConfig, TrainerOverrides, ModelBase, upload_model_artifact
 
@@ -110,7 +110,7 @@ def train_sweep_run():
                 image_patch_height=7,
                 embedding_dimension=config.embedding_size,
                 encoder_block_count=config.encoder_blocks,
-                encoder_block=EncoderBlockConfig(
+                encoder_block=SelfEncoderBlockConfig(
                     kq_dimension=config.kq_size,
                     v_dimension=config.v_size,
                     embedding_dimension=config.embedding_size,
