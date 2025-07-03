@@ -107,10 +107,12 @@ class BertMultiModalModel(MultiModalModel):
         return self.tokenizer.decode(token_ids, skip_special_tokens=True)
 
     def embed_token_ids(self, token_ids: torch.Tensor) -> torch.Tensor:
+        if token_ids.device != self.bert_model.device:
+            token_ids = token_ids.to(self.bert_model.device)
         return self.bert_model.bert.embeddings.word_embeddings(token_ids)
 
     def unembed_to_token_id_logits(self, hidden_state: torch.Tensor) -> torch.Tensor:
         return self.bert_model.cls(hidden_state)
 
-    def run_model(self, input_embeds: torch.Tensor) -> torch.Tensor:
-        return self.decoder(input_embeds)
+    def run_model(self, input_embeds: torch.Tensor, cache: Any = None) -> tuple[torch.Tensor, Any]:
+        return self.decoder(input_embeds), None

@@ -75,16 +75,18 @@ class ImageCaptioningModelTrainer(ModelTrainerBase):
         caption_section_result: CaptionSectionResult = self.model(collated_batch)
         caption_section_logits = caption_section_result.section_logits.to(device)
 
-        expected_token_ids = caption_section_ids[:, 1:]           # Offset by one
-        actual_output_logits = caption_section_logits[:, :-1, :]  # Remove the last SectionEnd token, so it aligns with the expected length
+        # We offset expected and actual by one
+        # We remove the useless prediction for the SectionEnd token
+        expected_token_ids = caption_section_ids[:, 1:]
+        actual_output_logits = caption_section_logits[:, :-1, :]
 
-        criterion = nn.CrossEntropyLoss(ignore_index=self.model.padding_token_id)
+        # Sanity check that we're attempting to learn that the last token should be a section end
+        assert expected_token_ids[0, -1].item() == self.model.special_token_ids.section_end
+
+        criterion = nn.CrossEntropyLoss(ignore_index=self.model.special_token_ids.padding)
         loss = criterion(
             # The CrossEntropyLoss expects the second dimension to be the token id dimension
-            einops.rearrange(
-                caption_section_logits[:, :-1, :],
-                "batch position token_id -> batch token_id position"
-            ),
+            einops.rearrange(actual_output_logits, "batch position token_id -> batch token_id position"),
             expected_token_ids,
         )
 

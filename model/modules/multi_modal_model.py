@@ -81,6 +81,10 @@ class SectionEmbedder:
             end_offset=self.current_sequence_offset,
         ))
 
+@dataclass
+class MultiModalModelResult:
+    sections: list[SectionEmbedder]
+    cache: Any
 
 class MultiModalModel(nn.Module):
     def __init__(self):
@@ -105,11 +109,9 @@ class MultiModalModel(nn.Module):
 
     def unembed_to_token_id_logits(self, hidden_state: torch.Tensor) -> torch.Tensor:
         raise NotImplementedError("Implement in super class")
-        # self.auto_model.lm_head(section_final_state)
 
-    def run_model(self, input_embeds: torch.Tensor) -> torch.Tensor:
+    def run_model(self, input_embeds: torch.Tensor, cache: Any = None) -> tuple[torch.Tensor, Any]:
         raise NotImplementedError("Implement in super class")
-        # return self.qwen_model(inputs_embeds=input_embeds).last_hidden_state
 
     def preprocess_images(self, images) -> ImageSection:
         return ImageSection(
@@ -142,43 +144,47 @@ class MultiModalModel(nn.Module):
             section_token_ids=token_ids_tensor,
         )
 
-    def embed_image_section(self, embedder: SectionEmbedder, section: ImageSection, device) -> None:
+    def embed_image_section(self, embedder: SectionEmbedder, section: ImageSection) -> None:
         batch_size = section.batch_size
         prepared_image = section.prepared_image
         tokens = self.special_token_ids
-        embedder.add(self.embed_token_id(tokens.section_start, batch_size, device))
-        embedder.add(self.embed_token_id(tokens.image, batch_size, device))
+        embedder.add(self.embed_token_id(tokens.section_start, batch_size))
+        embedder.add(self.embed_token_id(tokens.image, batch_size))
         embedder.add(self.image_encoder(prepared_image))
-        embedder.add(self.embed_token_id(tokens.section_end, batch_size, device))
+        embedder.add(self.embed_token_id(tokens.section_end, batch_size))
 
-    def embed_caption_section(self, embedder: SectionEmbedder, section: CaptionSection, device) -> None:
-        embedder.add(self.embed_token_ids(section.section_token_ids.to(device)))
+    def embed_caption_section(self, embedder: SectionEmbedder, section: CaptionSection) -> None:
+        embedder.add(self.embed_token_ids(section.section_token_ids))
 
-    def embed_token_id(self, token_id: int, batch_size, device) -> torch.Tensor:
-        input = torch.tensor([token_id], dtype=torch.long).to(device)
+    def embed_token_id(self, token_id: int, batch_size) -> torch.Tensor:
+        input = torch.tensor([token_id], dtype=torch.long)
         embedding = self.embed_token_ids(input)
         return einops.repeat(embedding, '1 embedding -> batch_size 1 embedding', batch_size=batch_size)
 
-    def forward(self, sections: list[Section]) -> list[SectionResult]:
+    def continue_forward(self, next_token_embed, cache) -> tuple[torch.Tensor, Any]:
+        """Returns the logits for the next token"""
+        final_hidden_state, cache = self.run_model(next_token_embed, cache)
+        return self.unembed_to_token_id_logits(final_hidden_state), cache
+
+    def forward(self, sections: list[Section]) -> MultiModalModelResult:
         # Go through each section, embed then, concatenate the embeddings, then run the model,
         # then return the results for each section.
 
         embedder = SectionEmbedder()
-        device = next(self.parameters()).device
         for section in sections:
             embedder.start_section()
             match section:
                 case ImageSection():
                     assert isinstance(section, ImageSection) # Fix PyCharm
-                    self.embed_image_section(embedder, section, device)
+                    self.embed_image_section(embedder, section)
                 case CaptionSection():
                     assert isinstance(section, CaptionSection) # Fix PyCharm
-                    self.embed_caption_section(embedder, section, device)
+                    self.embed_caption_section(embedder, section)
             embedder.end_section(section)
 
         # (Batch, Sequence, Embedding)
         inputs_embeds = torch.cat(embedder.embeddings, dim=-2)  # Concatenate along the sequence dimension
-        final_hidden_state = self.run_model(inputs_embeds)
+        final_hidden_state, cache = self.run_model(inputs_embeds)
 
         section_results = []
 
@@ -192,4 +198,7 @@ class MultiModalModel(nn.Module):
                         section_logits=self.unembed_to_token_id_logits(section_final_state)
                     ))
 
-        return section_results
+        return MultiModalModelResult(
+            sections=section_results,
+            cache=cache,
+        )

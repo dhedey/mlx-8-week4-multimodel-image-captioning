@@ -19,7 +19,8 @@ from sympy.stats.rv import probability
 
 from .modules.bert_custom_multi_modal_model import BertMultiModalModelConfig, BertMultiModalModel
 from .modules.qwen_multi_modal_model import QwenMultiModalModelConfig, QwenMultiModalModel
-from .modules.multi_modal_model import Section, CaptionSectionResult, CaptionSection
+from .modules.multi_modal_model import Section, CaptionSectionResult, CaptionSection, MultiModalModelResult, \
+    SpecialTokenIds
 from .common import ModelBase, ModuleConfig, TrainingConfig, Field
 
 class ImageCaptioningModelConfig(ModuleConfig):
@@ -60,41 +61,46 @@ class ImageCaptioningModel(ModelBase):
         return section_results[1]
 
     @property
-    def padding_token_id(self) -> int:
-        return self.multi_modal_model.special_token_ids.padding
+    def special_token_ids(self) -> SpecialTokenIds:
+        return self.multi_modal_model.special_token_ids
 
     def generate_caption(self, image, max_token_length: int = 100) -> str:
         collated_batch = self.collate([{"image": image, "caption": ""}])
         caption_section: CaptionSection = collated_batch["caption"]
         caption_section.section_token_ids = caption_section.section_token_ids[:, 0:2] # Start with <|im_start|> <|caption|>
-        output_token_ids = []
 
-        max_token_length = 50 # Avoid possible infinite loops
         is_truncated = False
         end_section_token_id = self.multi_modal_model.special_token_ids.section_end
 
+        initial_result: MultiModalModelResult = self.multi_modal_model([
+            collated_batch["image"],
+            collated_batch["caption"],
+        ])
+        caption_section_result = initial_result.sections[1]
+        assert isinstance(caption_section_result, CaptionSectionResult)
+        caption_logits = caption_section_result.section_logits
+        cache = initial_result.cache
+
+        # Read the next token from the <|caption|> token
+        next_token_logits = caption_logits[0, 1, :]
+        next_token_id = next_token_logits.argmax().item()
+        token_ids = [next_token_id]
+
         for i in range(max_token_length):
-            result: CaptionSectionResult = self.forward(collated_batch)
-            caption_logits = result.section_logits
-            next_token_logits = caption_logits[0, i + 1, :] # batch_index 0, sequence_index 1, take each token logit
+            next_token_embed = self.multi_modal_model.embed_token_id(next_token_id, batch_size=1)
+            single_token_logits, cache = self.multi_modal_model.continue_forward(next_token_embed, cache)
+            next_token_logits = single_token_logits[0, 0, :]
             next_token_id = next_token_logits.argmax().item()
             # probabilities = next_token_logits.softmax(dim=-1)
             # next_token_id = torch.searchsorted(probabilities.cumsum(0), torch.rand(1)).item()
             if next_token_id == end_section_token_id:
                 break
             else:
-                output_token_ids.append(next_token_id)
-                caption_section = collated_batch["caption"]
-                assert isinstance(caption_section, CaptionSection) # Fix pycharm complaining
-
-                caption_section.section_token_ids = torch.cat([
-                    caption_section.section_token_ids,
-                    torch.tensor([[next_token_id]], dtype=torch.long, device=caption_section.section_token_ids.device),
-                ], dim=1)
+                token_ids.append(next_token_id)
         else:
             is_truncated = True
 
-        output = self.multi_modal_model.token_ids_to_text(output_token_ids)
+        output = self.multi_modal_model.token_ids_to_text(token_ids)
         if is_truncated:
             output += " [TRUNCATED]"
 

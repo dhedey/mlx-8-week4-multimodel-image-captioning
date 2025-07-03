@@ -7,6 +7,27 @@ import torch
 has_cuda = torch.cuda.is_available()
 
 DEFAULT_MODEL_PARAMETERS = {
+    "qwen-base-captioner-pirate-v2": {
+        "model_class": ImageCaptioningModel,
+        "model": ImageCaptioningModelConfig(
+            model=QwenMultiModalModelConfig(
+                freeze_visual_model=True,
+                freeze_new_special_token_embeddings=True,
+                apply_lora_to_mlp_layers=True,
+            )
+        ),
+        "model_trainer": ImageCaptioningModelTrainer,
+        "training": ImageCaptioningModelTrainingConfig(
+            # Note: This is a very small batch size for Qwen models, but it is necessary to fit in memory.
+            batch_size=8,
+            print_after_batches=5,
+            validation_max_print_examples=5 if has_cuda else 1,
+            epochs=5,
+            learning_rate=0.0005,
+            optimizer="adamw",
+            dataset_kind="pirate",
+        ),
+    },
     "qwen-base-captioner-pirate": {
         "model_class": ImageCaptioningModel,
         "model": ImageCaptioningModelConfig(

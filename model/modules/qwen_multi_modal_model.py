@@ -22,6 +22,7 @@ from ..common import ModuleConfig
 class QwenMultiModalModelConfig(ModuleConfig):
     freeze_visual_model: bool
     freeze_new_special_token_embeddings: bool = False
+    apply_lora_to_mlp_layers: bool = False
 
 class QwenMultiModalModel(MultiModalModel):
     def __init__(self, config: QwenMultiModalModelConfig):
@@ -41,7 +42,7 @@ class QwenMultiModalModel(MultiModalModel):
         # Enable LORA on the Qwen model. get_peft_model actually changes it in-place
         lora_config = LoraConfig(
             r=16,
-            target_modules=["q_proj", "v_proj"],
+            target_modules=["mlp.up_proj", "mlp.down_proj", "q_proj", "v_proj"] if config.apply_lora_to_mlp_layers else ["q_proj", "v_proj"],
             task_type=TaskType.CAUSAL_LM,
             lora_alpha=32,
             lora_dropout=0.05
@@ -133,10 +134,17 @@ class QwenMultiModalModel(MultiModalModel):
         return self.tokenizer.decode(token_ids, skip_special_tokens=True)
 
     def embed_token_ids(self, token_ids: torch.Tensor) -> torch.Tensor:
+        if token_ids.device != self.qwen_model.device:
+            token_ids = token_ids.to(self.qwen_model.device)
         return self.qwen_model.embed_tokens(token_ids)
 
     def unembed_to_token_id_logits(self, hidden_state: torch.Tensor) -> torch.Tensor:
         return self.auto_model.lm_head(hidden_state)
 
-    def run_model(self, input_embeds: torch.Tensor) -> torch.Tensor:
-        return self.qwen_model(inputs_embeds=input_embeds).last_hidden_state
+    def run_model(self, input_embeds: torch.Tensor, cache: Any = None) -> tuple[torch.Tensor, Any]:
+        result = self.qwen_model(
+            inputs_embeds=input_embeds,
+            use_cache=True,
+            past_key_values=cache,
+        )
+        return result.last_hidden_state, result.past_key_values
