@@ -4,6 +4,22 @@ from .models import ImageCaptioningModel, ImageCaptioningModelConfig
 from .trainer import ModelTrainerBase, ImageCaptioningModelTrainer, ImageCaptioningModelTrainingConfig
 
 DEFAULT_MODEL_PARAMETERS = {
+    "qwen-base-captioner-pirate": {
+        "model_class": ImageCaptioningModel,
+        "model": ImageCaptioningModelConfig(
+            model=QwenMultiModalModelConfig(
+                freeze_visual_model=True,
+            )
+        ),
+        "model_trainer": ImageCaptioningModelTrainer,
+        "training": ImageCaptioningModelTrainingConfig(
+            batch_size=128,
+            epochs=10,
+            learning_rate=0.001,
+            optimizer="adamw",
+            dataset_kind="pirate",
+        ),
+    },
     "qwen-base-captioner-v1": {
         "model_class": ImageCaptioningModel,
         "model": ImageCaptioningModelConfig(
@@ -17,6 +33,7 @@ DEFAULT_MODEL_PARAMETERS = {
             epochs=10,
             learning_rate=0.001,
             optimizer="adamw",
+            dataset_kind="standard",
         ),
     },
     "custom-image-captioner-v1": {
@@ -42,6 +59,7 @@ DEFAULT_MODEL_PARAMETERS = {
             epochs=10,
             learning_rate=0.001,
             optimizer="adamw",
+            dataset_kind="standard",
         ),
     },
 }

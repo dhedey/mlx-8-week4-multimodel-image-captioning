@@ -1,5 +1,6 @@
 import datasets
 import os
+import huggingface_hub
 
 def noop_collate(batch):
     return batch
@@ -24,11 +25,30 @@ def flickr30k_take_first_caption(dataset_batch):
         "caption": captions,
     }
 
-def generate_image_caption_datasets():
+def generate_image_caption_datasets(dataset_kind = "standard"):
     data_folder = os.path.join(os.path.dirname(__file__), "datasets")
 
-    # The dataset is improperly pre-split, and just has a train partition. Use that.
-    ds = datasets.load_dataset("nlphuji/flickr30k", data_dir=data_folder)["test"]
+    match dataset_kind:
+        case "standard":
+            # The dataset is improperly pre-split, and just has a train partition. Use that.
+            ds = datasets.load_dataset(
+                "nlphuji/flickr30k",
+                data_dir=data_folder,
+                split="test",
+            )
+        case "pirate":
+            print("Need to login so that you can have access to the private dataset")
+            print("Visit https://huggingface.co/settings/tokens to get a token")
+            huggingface_hub.login()
+            ds = datasets.load_dataset(
+                "david-edey/flickr30k-pirate-captions",
+                data_dir=data_folder,
+                split="test",
+                token=True,
+            )
+        case _:
+            raise ValueError(f"Unknown dataset kind: {dataset_kind}")
+
 
     train_dataset = ds.filter(flickr30k_is_train)
     train_dataset = train_dataset.map(flickr30k_take_first_caption, batched=True, remove_columns=ds.column_names)

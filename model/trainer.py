@@ -24,6 +24,7 @@ from .prepared_datasets import generate_image_caption_datasets, noop_collate
 
 
 class ImageCaptioningModelTrainingConfig(TrainingConfig):
+    dataset_kind: str # "standard" or "pirate"
     print_after_batches: int = 1 # Override default
     validation_max_print_examples: int = 5
 
@@ -42,7 +43,7 @@ class ImageCaptioningModelTrainer(ModelTrainerBase):
         self.config = config
 
         print("Preparing datasets...")
-        train_dataset, eval_dataset = generate_image_caption_datasets()
+        train_dataset, eval_dataset = generate_image_caption_datasets(config.dataset_kind)
 
         print(f"Training set size: {len(train_dataset)}")
         print(f"Test set size: {len(eval_dataset)}")
