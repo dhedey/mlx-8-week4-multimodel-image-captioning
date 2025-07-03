@@ -74,6 +74,13 @@ class QwenMultiModalModel(MultiModalModel):
             lora_target_modules.append("mlp.up_proj")
             lora_target_modules.append("mlp.down_proj")
         if config.apply_lora_to_lm_head_layer:
+            # We were really struggling to predict the end of section tokens, so hopefully applying LoRA to the
+            # lm_head layer could help with that.
+            # 
+            # We have to hackily disable the auto-tying of the lm_head layer with the embed_tokens layer so that
+            # LoRA can be applied without causing issues when the model runs.
+            # https://github.com/huggingface/peft/issues/2244#issuecomment-2511556202
+            self.auto_model.lm_head.weight.data = self.auto_model.model.embed_tokens.weight.data.clone()
             lora_target_modules.append("lm_head")
 
         self.peft_model = get_peft_model(
