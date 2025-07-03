@@ -40,25 +40,6 @@ class QwenMultiModalModel(MultiModalModel):
         self.auto_model: transformers.Qwen2ForCausalLM = transformers.AutoModelForCausalLM.from_pretrained(model_name)
         self.qwen_model: transformers.Qwen2Model = self.auto_model.model
 
-        # Enable LORA on the Qwen model. get_peft_model actually changes it in-place
-        lora_target_modules = ["q_proj", "v_proj"]
-        if config.apply_lora_to_mlp_layers:
-            lora_target_modules.append("mlp.up_proj")
-            lora_target_modules.append("mlp.down_proj")
-        if config.apply_lora_to_lm_head_layer:
-            lora_target_modules.append("lm_head")
-        lora_config = LoraConfig(
-            r=16,
-            target_modules=lora_target_modules,
-            task_type=TaskType.CAUSAL_LM,
-            lora_alpha=32,
-            lora_dropout=0.05
-        )
-        self.peft_model = get_peft_model(
-            self.auto_model,
-            lora_config,
-        )
-
         # SPECIAL TOKENS
         # <|im_start|>, <|im_end|>, <|user|>, <|assistant|>:
         # > Chat/Instruct models: Used and understood.
@@ -93,6 +74,26 @@ class QwenMultiModalModel(MultiModalModel):
                 self._special_token_ids.section_start,
                 self._special_token_ids.section_end,
             ])
+
+        # Enable LORA on the Qwen model. get_peft_model actually changes it in-place
+        # We have to change it after the lm_head is resized by adding new tokens, else it won't work.
+        lora_target_modules = ["q_proj", "v_proj"]
+        if config.apply_lora_to_mlp_layers:
+            lora_target_modules.append("mlp.up_proj")
+            lora_target_modules.append("mlp.down_proj")
+        if config.apply_lora_to_lm_head_layer:
+            lora_target_modules.append("lm_head")
+        lora_config = LoraConfig(
+            r=16,
+            target_modules=lora_target_modules,
+            task_type=TaskType.CAUSAL_LM,
+            lora_alpha=32,
+            lora_dropout=0.05
+        )
+        self.peft_model = get_peft_model(
+            self.auto_model,
+            lora_config,
+        )
 
         self.embedding_dimension: int = self.qwen_model.config.hidden_size
 
