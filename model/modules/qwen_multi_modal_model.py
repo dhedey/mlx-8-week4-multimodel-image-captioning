@@ -80,7 +80,7 @@ class QwenMultiModalModel(MultiModalModel):
             # We have to hackily disable the auto-tying of the lm_head layer with the embed_tokens layer so that
             # LoRA can be applied without causing issues when the model runs.
             # https://github.com/huggingface/peft/issues/2244#issuecomment-2511556202
-            lora_target_modules.append("embed_tokens.weight")
+            lora_target_modules.append("embed_tokens")
 
         self.peft_model = get_peft_model(
             self.auto_model,    
