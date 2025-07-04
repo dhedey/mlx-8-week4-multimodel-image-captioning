@@ -226,6 +226,16 @@ class ModelBase(nn.Module):
         raise ValueError("Either model_name or model_path must be provided to load a model.")
 
     @classmethod
+    def load_only_training_state(
+        cls,
+        model_name: Optional[str] = None,
+        model_path: Optional[str] = None,
+    ) -> TrainingState:
+        model_path = cls.resolve_path(model_name=model_name, model_path=model_path)
+        loaded_model_data = torch.load(model_path, map_location=device)
+        return TrainingState.from_dict(loaded_model_data["training"]["state"])
+
+    @classmethod
     def load_advanced(
         cls,
         model_name: Optional[str] = None,
@@ -708,7 +718,7 @@ class ModelTrainerBase:
 
         best_model_name = self.model.model_name + '-best'
         if ModelBase.exists(model_name=best_model_name):
-            _, best_training_state, _ = ModelBase.load_advanced(model_name=best_model_name, device="cpu")
+            best_training_state = ModelBase.load_only_training_state(model_name=best_model_name)
             best_validation_loss = best_training_state.latest_validation_results.validation_loss
             best_validation_epoch = best_training_state.latest_validation_results.epoch
         else:
