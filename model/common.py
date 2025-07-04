@@ -717,13 +717,15 @@ class ModelTrainerBase:
             return
 
         best_model_name = self.model.model_name + '-best'
+        best_validation_loss = None
+        best_validation_epoch = None
         if ModelBase.exists(model_name=best_model_name):
-            best_training_state = ModelBase.load_only_training_state(model_name=best_model_name)
-            best_validation_loss = best_training_state.latest_validation_results.validation_loss
-            best_validation_epoch = best_training_state.latest_validation_results.epoch
-        else:
-            best_validation_loss = None
-            best_validation_epoch = None
+            try:
+                best_training_state = ModelBase.load_only_training_state(model_name=best_model_name)
+                best_validation_loss = best_training_state.latest_validation_results.validation_loss
+                best_validation_epoch = best_training_state.latest_validation_results.epoch
+            except Exception as e:
+                print(f"⚠️  Failed to load the best model training state: {e}")
 
         def format_optional_float(value):
             return f"{value:.3g}" if value is not None else "N/A"
