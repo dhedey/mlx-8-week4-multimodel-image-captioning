@@ -19,6 +19,7 @@ import model.models as models
 display_names = {
     "qwen-base-captioner-v1-best": "CLIP + Qwen",
     "qwen-base-captioner-v1-pirate-best": "CLIP + Qwen + Stylistic fine-tuning",
+    "qwen-base-captioner-pirate-not-finetuned": "CLIP + Qwen + Stylistic (not fine-tuned)",
 }
 name_to_key = {v: k for k, v in display_names.items()}
 
@@ -70,5 +71,5 @@ with image_col:
 with generate_col:
     model = load_model(model_key)
     if image is not None:
-        caption = model.generate_caption_streaming(image, max_token_length=200)
+        caption = model.generate_caption_streaming(image, max_token_length=150)
         st.write_stream(caption)
