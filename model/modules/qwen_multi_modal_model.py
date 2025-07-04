@@ -39,6 +39,9 @@ class QwenMultiModalModelConfig(ModuleConfig):
     freeze_new_special_token_embeddings: Optional[bool] = False
     """Included for back-compat only. Use embedding_learning_strategy instead"""
     apply_lora_to_mlp_layers: bool = False
+    lora_alpha: int = 16
+    lora_rank: int = 16
+    lora_dropout: float = 0.05
 
 class QwenMultiModalModel(MultiModalModel):
     def __init__(self, config: QwenMultiModalModelConfig):
@@ -119,11 +122,11 @@ class QwenMultiModalModel(MultiModalModel):
         self.peft_model = get_peft_model(
             self.auto_model,    
             LoraConfig(
-                r=16,
+                r=config.lora_rank,
                 target_modules=lora_target_modules,
                 task_type=TaskType.CAUSAL_LM,
-                lora_alpha=32,
-                lora_dropout=0.05
+                lora_alpha=config.lora_alpha,
+                lora_dropout=config.lora_dropout,
             ),
         )
 
@@ -152,8 +155,9 @@ class QwenMultiModalModel(MultiModalModel):
                 self.lm_head_lora = CustomLora(CustomLoraConfig(
                     input_dim=self.qwen_model.config.hidden_size,
                     output_dim=len(self.tokenizer),  # vocab size
-                    rank=64,  # configurable rank
-                    dropout=0.1
+                    rank=config.lora_rank,  # configurable rank
+                    dropout=config.lora_dropout,
+                    alpha=config.lora_alpha,
                 ))
                 
 
