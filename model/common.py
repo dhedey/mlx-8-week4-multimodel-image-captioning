@@ -723,6 +723,7 @@ class ModelTrainerBase:
             train_average_loss = "UNK"
             overfitting_measure = "UNK"
 
+        print()
         print(f"Train-comparable validation complete (Val/Train Loss: {validation_average_train_loss:.3g}/{train_average_loss:.3g}, Overfitting: {overfitting_measure:.2%}, Time: {time_elapsed:.1f}s)")
         print()
 
@@ -732,11 +733,13 @@ class ModelTrainerBase:
         self.model.eval()
 
         with torch.no_grad():
-            validation_results = self.train_comparable_validation()
 
             print("> Starting custom validation...")
             print()
             custom_results = self.custom_validation()
+            print()
+
+            validation_results = self.train_comparable_validation()
             if custom_results is None:
                 custom_results = {}
 
