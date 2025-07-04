@@ -28,7 +28,7 @@ mode_col, model_select_col = st.columns([5, 5])
 with mode_col:
     mode = st.selectbox(
         "Choose a mode:",
-        options=["Upload"],
+        options=["Upload", "Webcam"],
         index=0,
     )
 with model_select_col:
@@ -47,16 +47,25 @@ def load_model(model_name) -> models.ImageCaptioningModel:
 image_col, generate_col = st.columns([5, 5])
 
 with image_col:
-    uploaded_file = st.file_uploader("Upload an image", type=["jpg", "jpeg", "png"], label_visibility="collapsed")
-    if uploaded_file is not None:
-        try:
-            image = Image.open(uploaded_file).convert("RGB")
-            st.image(image, use_container_width=True)
-        except Exception as e:
-            st.error(f"Error loading image: {e}")
-            image = None
-    else:
-        image = None
+    image = None
+    match mode:
+        case "Upload":
+            uploaded_file = st.file_uploader("Upload an image", type=["jpg", "jpeg", "png"], label_visibility="collapsed")
+            if uploaded_file is not None:
+                try:
+                    image = Image.open(uploaded_file).convert("RGB")
+                    st.image(image, use_container_width=True)
+                except Exception as e:
+                    st.error(f"Error loading image: {e}")
+                    image = None
+        case "Webcam":
+            camera_frame = st.camera_input("Capture an image", key="webcam_input")
+            if camera_frame is not None:
+                try:
+                    image = Image.open(camera_frame).convert("RGB")
+                except Exception as e:
+                    st.error(f"Error loading webcam image: {e}")
+                    image = None        
 
 with generate_col:
     model = load_model(model_key)
@@ -65,4 +74,3 @@ with generate_col:
     else:
         caption = model.generate_caption_streaming(image, max_token_length=200)
         st.write_stream(caption)
-                
