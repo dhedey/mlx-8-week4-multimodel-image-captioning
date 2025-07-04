@@ -14,7 +14,7 @@ DEFAULT_MODEL_PARAMETERS = {
             model=QwenMultiModalModelConfig(
                 freeze_visual_model=True,
                 special_tokens_strategy=SpecialTokensStrategy.REUSE_EXISTING_UNTRAINED,
-                embedding_learning_strategy=EmbeddingLearningStrategy.LEARN_NEW_WITH_GRAD_FILTERING,
+                embedding_learning_strategy=EmbeddingLearningStrategy.LORA,
             )
         ),
         "model_trainer": ImageCaptioningModelTrainer,
@@ -23,7 +23,8 @@ DEFAULT_MODEL_PARAMETERS = {
             batch_size=4,
             print_after_batches=5,
             validation_max_print_examples=3 if has_cuda else 1,
-            epochs=5,
+            custom_validate_after_batches=200,
+            epochs=3,
             learning_rate=0.0005,
             optimizer="adamw",
             dataset_kind="pirate",
