@@ -110,12 +110,10 @@ class QwenMultiModalModel(MultiModalModel):
         if config.apply_lora_to_mlp_layers:
             lora_target_modules.append("mlp.up_proj")
             lora_target_modules.append("mlp.down_proj")
-        if config.apply_lora_to_lm_head_layer:
-            # We were really struggling to predict the end of section tokens, so hopefully applying LoRA to the
-            # lm_head layer could help with that.
-            # However, the lm_head is tied to the embed_tokens layer, which breaks LoRA.
-            # So let's do it ourselves.
-            raise NotImplementedError("Applying LoRA to the lm_head layer is not implemented yet. Would need to be done manually.")
+
+        # NOTE: We cannot apply LoRA to the lm_head layer using PEFT, because it is tied to the embed_tokens layer.
+        # If we need to do that, we'll need to do it ourselves via adding our own learnable weights to the lm_head layer.
+        # (see EmbeddingLearningStrategy.LORA below)
 
         self.peft_model = get_peft_model(
             self.auto_model,    

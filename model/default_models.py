@@ -36,8 +36,6 @@ DEFAULT_MODEL_PARAMETERS = {
             model=QwenMultiModalModelConfig(
                 freeze_visual_model=True,
                 freeze_new_special_token_embeddings=True,
-                apply_lora_to_mlp_layers=False,
-                apply_lora_to_lm_head_layer=True,
             )
         ),
         "model_trainer": ImageCaptioningModelTrainer,
@@ -50,6 +48,7 @@ DEFAULT_MODEL_PARAMETERS = {
             learning_rate=0.0005,
             optimizer="adamw",
             dataset_kind="pirate",
+            save_only_grad_weights=True,
         ),
     },
     "qwen-base-captioner-v1": {
@@ -57,9 +56,8 @@ DEFAULT_MODEL_PARAMETERS = {
         "model": ImageCaptioningModelConfig(
             model = QwenMultiModalModelConfig(
                 freeze_visual_model=True,
-                freeze_new_special_token_embeddings=True,
-                apply_lora_to_mlp_layers=False,
-                apply_lora_to_lm_head_layer=True,
+                special_tokens_strategy=SpecialTokensStrategy.REUSE_EXISTING_UNTRAINED,
+                embedding_learning_strategy=EmbeddingLearningStrategy.LEARN_NEW_WITH_GRAD_FILTERING,
             )
         ),
         "model_trainer": ImageCaptioningModelTrainer,
@@ -69,6 +67,7 @@ DEFAULT_MODEL_PARAMETERS = {
             learning_rate=0.001,
             optimizer="adamw",
             dataset_kind="standard",
+            save_only_grad_weights=True,
         ),
     },
     "custom-image-captioner-v1": {
