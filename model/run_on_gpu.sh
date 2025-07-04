@@ -32,7 +32,9 @@ git config --global user.name "David Edey"
 # => Reattach with tmux attach -t 0
 # => Scroll with Ctrl+B [ then use the arrow keys or mouse to scroll up and down. Leave scroll mode with Esc or q
 
-tmux new -s sweep
+tmux new -s training_session
+
+uv run huggingface-cli login # See Discord for token
 
 # Check GPU usage with the nvtop command
 
