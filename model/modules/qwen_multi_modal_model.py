@@ -130,6 +130,7 @@ class QwenMultiModalModel(MultiModalModel):
             ),
         )
 
+        self.lm_head_lora: Optional[CustomLora] = None
         match config.embedding_learning_strategy:
             case EmbeddingLearningStrategy.LEARN_ALL:
                 self.qwen_model.embed_tokens.requires_grad_(True)
@@ -209,8 +210,8 @@ class QwenMultiModalModel(MultiModalModel):
         return self.qwen_model.embed_tokens(token_ids)
 
     def unembed_to_token_id_logits(self, hidden_state: torch.Tensor) -> torch.Tensor:
-        if self.lm_head_lora_diff is not None:
-            return self.auto_model.lm_head(hidden_state) + self.lm_head_lora_diff(hidden_state)
+        if self.lm_head_lora is not None:
+            return self.auto_model.lm_head(hidden_state) + self.lm_head_lora(hidden_state)
         else:
           self.auto_model.lm_head(hidden_state)
 
