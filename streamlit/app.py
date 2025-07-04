@@ -69,8 +69,5 @@ with image_col:
 
 with generate_col:
     model = load_model(model_key)
-    if image is None:
-        st.info("Please upload an image")
-    else:
-        caption = model.generate_caption_streaming(image, max_token_length=200)
-        st.write_stream(caption)
+    caption = model.generate_caption_streaming(image, max_token_length=200)
+    st.write_stream(caption)
