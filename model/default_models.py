@@ -13,7 +13,7 @@ DEFAULT_MODEL_PARAMETERS = {
         "model": ImageCaptioningModelConfig(
             model=QwenMultiModalModelConfig(
                 freeze_visual_model=True,
-                special_tokens_strategy=SpecialTokensStrategy.REUSE_EXISTING_UNTRAINED,
+                special_tokens_strategy=SpecialTokensStrategy.CREATE_NEW,
                 embedding_learning_strategy=EmbeddingLearningStrategy.LORA,
             )
         ),
@@ -23,7 +23,6 @@ DEFAULT_MODEL_PARAMETERS = {
             batch_size=4,
             print_after_batches=5,
             validation_max_print_examples=3 if has_cuda else 1,
-            custom_validate_after_batches=200,
             epochs=3,
             learning_rate=0.0005,
             optimizer="adamw",
@@ -58,17 +57,17 @@ DEFAULT_MODEL_PARAMETERS = {
             model = QwenMultiModalModelConfig(
                 freeze_visual_model=True,
                 special_tokens_strategy=SpecialTokensStrategy.REUSE_EXISTING_UNTRAINED,
-                embedding_learning_strategy=EmbeddingLearningStrategy.LEARN_NEW_WITH_GRAD_FILTERING,
+                embedding_learning_strategy=EmbeddingLearningStrategy.LORA,
             )
         ),
         "model_trainer": ImageCaptioningModelTrainer,
         "training": ImageCaptioningModelTrainingConfig(
             batch_size=4,
-            epochs=10,
-            learning_rate=0.001,
+            epochs=1,
+            learning_rate=0.0005,
             print_after_batches=5,
-            validation_max_print_examples=5 if has_cuda else 1,
-            custom_validate_after_batches=100,
+            validation_max_print_examples=3 if has_cuda else 1,
+            custom_validate_after_batches=200,
             optimizer="adamw",
             dataset_kind="standard",
             save_only_grad_weights=True,
