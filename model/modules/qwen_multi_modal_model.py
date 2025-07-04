@@ -213,7 +213,7 @@ class QwenMultiModalModel(MultiModalModel):
         if self.lm_head_lora is not None:
             return self.auto_model.lm_head(hidden_state) + self.lm_head_lora(hidden_state)
         else:
-          self.auto_model.lm_head(hidden_state)
+            return self.auto_model.lm_head(hidden_state)
 
     def run_model(self, input_embeds: torch.Tensor, cache: Any = None) -> tuple[torch.Tensor, Any]:
         result = self.qwen_model(

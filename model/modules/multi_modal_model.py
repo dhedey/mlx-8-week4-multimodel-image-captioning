@@ -83,7 +83,7 @@ class SectionEmbedder:
 
 @dataclass
 class MultiModalModelResult:
-    sections: list[SectionEmbedder]
+    sections: list[SectionResult]
     cache: Any
 
 class MultiModalModel(nn.Module):
@@ -197,6 +197,8 @@ class MultiModalModel(nn.Module):
                     section_results.append(CaptionSectionResult(
                         section_logits=self.unembed_to_token_id_logits(section_final_state)
                     ))
+                case _:
+                    raise ValueError(f"Unknown section type: {section_data.section}")
 
         return MultiModalModelResult(
             sections=section_results,
