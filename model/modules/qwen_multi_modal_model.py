@@ -20,6 +20,7 @@ from peft import LoraConfig, TaskType, get_peft_model
 from .multi_modal_model import MultiModalModel, SpecialTokenIds
 from .image_encoders import ClipImageEncoder, ClipImageEncoderConfig, ImageEncoderBase
 from ..common import ModuleConfig
+from .custom_lora import CustomLora, CustomLoraConfig
 
 class EmbeddingLearningStrategy(StrEnum):
     LEARN_ALL = "learn_all"
@@ -38,6 +39,7 @@ class QwenMultiModalModelConfig(ModuleConfig):
     freeze_new_special_token_embeddings: Optional[bool] = False
     """Included for back-compat only. Use embedding_learning_strategy instead"""
     apply_lora_to_mlp_layers: bool = False
+    apply_lora_to_lm_head_layer: bool = False
 
 class QwenMultiModalModel(MultiModalModel):
     def __init__(self, config: QwenMultiModalModelConfig):
@@ -152,6 +154,16 @@ class QwenMultiModalModel(MultiModalModel):
             freeze_visual_model=self.config.freeze_visual_model,
         ))
 
+        if config.apply_lora_to_lm_head_layer:
+            self.lm_head_lora_diff = CustomLora(CustomLoraConfig(
+                input_dim=self.embedding_dimension,
+                output_dim=len(self.tokenizer),  # vocab size
+                rank=64,  # or make it configurable
+                dropout=0.1
+            ))
+        else:
+            self.lm_head_lora_diff = None
+
     def only_accept_gradients_for_these_token_ids(self, trainable_token_ids) -> None:
         # Allow the model to learn (just) these embeddings
         # See this stack overflow post: https://stackoverflow.com/a/79621033
@@ -192,7 +204,10 @@ class QwenMultiModalModel(MultiModalModel):
         return self.qwen_model.embed_tokens(token_ids)
 
     def unembed_to_token_id_logits(self, hidden_state: torch.Tensor) -> torch.Tensor:
-        return self.auto_model.lm_head(hidden_state)
+        if self.lm_head_lora_diff is not None:
+            return self.auto_model.lm_head(hidden_state) + self.lm_head_lora_diff(hidden_state)
+        else:
+          self.auto_model.lm_head(hidden_state)
 
     def run_model(self, input_embeds: torch.Tensor, cache: Any = None) -> tuple[torch.Tensor, Any]:
         result = self.qwen_model(
