@@ -68,7 +68,7 @@ with image_col:
                     image = None        
 
 with generate_col:
+    model = load_model(model_key)
     if image is not None:
-        model = load_model(model_key)
         caption = model.generate_caption_streaming(image, max_token_length=200)
         st.write_stream(caption)
