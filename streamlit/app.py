@@ -18,7 +18,7 @@ import model.models as models
 # Invert the display_names dictionary to map display names back to keys
 display_names = {
     "qwen-base-captioner-v1-best": "CLIP + Qwen",
-    "qwen-base-captioner-v1-pirate-best": "CLIP + Qwen + Pirate fine-tuning",
+    "qwen-base-captioner-v1-pirate-best": "CLIP + Qwen + Stylistic fine-tuning",
 }
 name_to_key = {v: k for k, v in display_names.items()}
 
