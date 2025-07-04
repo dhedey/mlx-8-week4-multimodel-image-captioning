@@ -112,11 +112,12 @@ class ImageCaptioningModelTrainer(ModelTrainerBase):
             for item in raw_batch:
                 if print_example_count >= self.config.validation_max_print_examples:
                     break
-                print(f"Example {print_example_count + 1}")
+                print(f"===== Example {print_example_count + 1} =====")
                 print(f"- Actual caption   : {item["caption"]}")
                 print(f"- Generated caption: ", end="", flush=True)
                 for token in self.model.generate_caption_streaming(item["image"]):
                     print(token, end="", flush=True)
+                print()
                 print()
                 print_example_count += 1
 

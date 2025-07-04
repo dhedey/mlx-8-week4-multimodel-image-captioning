@@ -663,7 +663,7 @@ class ModelTrainerBase:
         if self.best_training_results is None or training_results.average_loss < self.best_training_results.average_loss:
             self.best_training_results = training_results
 
-    def train_compatible_validation(self) -> ValidationResults:
+    def train_comparable_validation(self) -> ValidationResults:
         print_every = self.config.print_after_batches
         running_loss = 0.0
         running_samples = 0
@@ -682,7 +682,7 @@ class ModelTrainerBase:
 
         total_loss = 0.0
         total_samples = 0
-        for batch_idx, raw_batch in enumerate(self.train_data_loader):
+        for batch_idx, raw_batch in enumerate(self.validation_data_loader):
             batch_results = self.process_batch(raw_batch)
 
             loss = batch_results.total_loss
@@ -726,14 +726,16 @@ class ModelTrainerBase:
         print(f"Train-comparable validation complete (Val/Train Loss: {validation_average_train_loss:.3g}/{train_average_loss:.3g}, Overfitting: {overfitting_measure:.2%}, Time: {time_elapsed:.1f}s)")
         print()
 
+        return validation_results
+
     def validate(self) -> ValidationResults:
-        print("> Starting validation...")
-        print()
         self.model.eval()
 
         with torch.no_grad():
-            validation_results = self.train_compatible_validation()
+            validation_results = self.train_comparable_validation()
 
+            print("> Starting custom validation...")
+            print()
             custom_results = self.custom_validation()
             if custom_results is None:
                 custom_results = {}
