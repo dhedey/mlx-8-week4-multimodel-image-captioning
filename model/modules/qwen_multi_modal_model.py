@@ -39,7 +39,6 @@ class QwenMultiModalModelConfig(ModuleConfig):
     freeze_new_special_token_embeddings: Optional[bool] = False
     """Included for back-compat only. Use embedding_learning_strategy instead"""
     apply_lora_to_mlp_layers: bool = False
-    apply_lora_to_lm_head_layer: bool = False
 
 class QwenMultiModalModel(MultiModalModel):
     def __init__(self, config: QwenMultiModalModelConfig):
@@ -144,7 +143,19 @@ class QwenMultiModalModel(MultiModalModel):
                     self._special_token_ids.section_end,
                 ])
             case EmbeddingLearningStrategy.LORA:
-                raise NotImplementedError("LoRA has not been implemented for lm_head yet")
+                # For LoRA strategy, we freeze the base embeddings and lm_head
+                # and create a custom LoRA layer for the lm_head
+                self.qwen_model.embed_tokens.requires_grad_(False)
+                self.auto_model.lm_head.requires_grad_(False)
+                
+                # Create custom LoRA for lm_head since PEFT can't handle tied weights
+                self.lm_head_lora = CustomLora(CustomLoraConfig(
+                    input_dim=self.qwen_model.config.hidden_size,
+                    output_dim=len(self.tokenizer),  # vocab size
+                    rank=64,  # configurable rank
+                    dropout=0.1
+                ))
+                
 
         self.embedding_dimension: int = self.qwen_model.config.hidden_size
 
@@ -153,16 +164,6 @@ class QwenMultiModalModel(MultiModalModel):
             model_embedding_dimension=self.embedding_dimension,
             freeze_visual_model=self.config.freeze_visual_model,
         ))
-
-        if config.apply_lora_to_lm_head_layer:
-            self.lm_head_lora_diff = CustomLora(CustomLoraConfig(
-                input_dim=self.embedding_dimension,
-                output_dim=len(self.tokenizer),  # vocab size
-                rank=64,  # or make it configurable
-                dropout=0.1
-            ))
-        else:
-            self.lm_head_lora_diff = None
 
     def only_accept_gradients_for_these_token_ids(self, trainable_token_ids) -> None:
         # Allow the model to learn (just) these embeddings

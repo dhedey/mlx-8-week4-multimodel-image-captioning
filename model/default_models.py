@@ -15,7 +15,6 @@ DEFAULT_MODEL_PARAMETERS = {
                 freeze_visual_model=True,
                 special_tokens_strategy=SpecialTokensStrategy.REUSE_EXISTING_UNTRAINED,
                 embedding_learning_strategy=EmbeddingLearningStrategy.LEARN_NEW_WITH_GRAD_FILTERING,
-                apply_lora_to_lm_head_layer=True,
             )
         ),
         "model_trainer": ImageCaptioningModelTrainer,
