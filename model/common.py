@@ -50,6 +50,7 @@ class TrainingConfig(PersistableData):
     save_only_grad_weights: bool = False
     warmup_epochs: int = 0 # Number of epochs to warm up the learning rate
     print_after_batches: int = 10
+    custom_validate_after_batches: Optional[int] = None
     batch_limit: Optional[int] = None
     optimizer: str = "AdamW"
     """
@@ -73,7 +74,7 @@ class TrainingConfig(PersistableData):
 
 class ValidationResults(PersistableData, extra="allow"):
     epoch: int
-    average_training_loss: float = 0.0 # Default to 0.0 to support backwards compatibility
+    train_comparable_loss: float = 0.0 # Default to 0.0 to support backwards compatibility
     """
     The average training loss is a measure of how well the model performs on the validation set, in comparison to the training set.
     IMPORTANT: This must be comparable to the training loss, to act as a measure of overfitting.
@@ -476,6 +477,27 @@ class ModelTrainerBase:
 
         print()
 
+    @property
+    def train_data_loader(self):
+        raise NotImplementedError("This property should be implemented by subclasses.")
+
+    @property
+    def validation_data_loader(self):
+        raise NotImplementedError("This property should be implemented by subclasses.")
+
+    def process_batch(self, raw_batch) -> BatchResults:
+        raise NotImplementedError("This method should be implemented by subclasses.")
+
+    def custom_validation(self) -> Optional[dict]:
+        """
+        This allows trainers to add specific validations.
+        If they have a better measure of validation success, they should return "validation_loss" in their dictionary,
+        which will override the train_comparable_loss
+        """
+        print("No custom validations have been defined in the trainer, skipping")
+        print()
+        return None
+
     @classmethod
     def load_with_model(cls, model_name: Optional[str] = None, overrides: Optional[TrainingOverrides] = None, device: Optional[str] = None, model_path: Optional[str] = None) -> Self:
         model, state, config = ModelBase.load_advanced(model_name=model_name, device=device, model_path=model_path)
@@ -516,7 +538,7 @@ class ModelTrainerBase:
             print()
             self.train_epoch()
             if self.epoch % self.validate_after_epochs == 0 or self.epoch == self.config.epochs or self.latest_validation_results is None:
-                self.run_validation()
+                self.validate()
 
                 if wandb.run is not None:
                     log_data = {
@@ -571,13 +593,14 @@ class ModelTrainerBase:
         self.model.train()
 
         print_every = self.config.print_after_batches
+        custom_validate_every = self.config.custom_validate_after_batches
+
         running_loss = 0.0
         running_samples = 0
-        train_data_loader = self.get_train_data_loader()
-        total_batches = len(train_data_loader)
+
+        total_batches = len(self.train_data_loader)
         
         start_epoch_time_at = time.time()
-
 
         if self.config.batch_limit is not None and total_batches >= self.config.batch_limit:
             total_batches_text = f"{self.config.batch_limit:,} (limited from {total_batches:,} by config.batch_limit)"
@@ -590,7 +613,7 @@ class ModelTrainerBase:
 
         epoch_loss = 0.0
         epoch_samples = 0
-        for batch_idx, raw_batch in enumerate(train_data_loader):
+        for batch_idx, raw_batch in enumerate(self.train_data_loader):
             self.optimizer.zero_grad()
             batch_results = self.process_batch(raw_batch)
 
@@ -608,6 +631,12 @@ class ModelTrainerBase:
                 print(f"Epoch {self.epoch}/{self.config.epochs}, Batch {batch_num}/{total_batches}, Recent Avg Loss: {(running_loss / running_samples):.3g}")
                 running_loss = 0.0
                 running_samples = 0
+
+            if custom_validate_every is not None and batch_num % custom_validate_every == 0:
+                print()
+                print(f"Starting mid-epoch custom validation at batch {batch_num}:")
+                print()
+                self.custom_validation()
 
             if batch_num == total_batches: # Handle self.config.batch_limit
                 break
@@ -634,19 +663,51 @@ class ModelTrainerBase:
         if self.best_training_results is None or training_results.average_loss < self.best_training_results.average_loss:
             self.best_training_results = training_results
 
-    def process_batch(self, raw_batch) -> BatchResults:
-        raise NotImplementedError("This class method should be implemented by subclasses.")
-    
-    def get_train_data_loader(self):
-        raise NotImplementedError("This class method should be implemented by subclasses.")
+    def train_compatible_validation(self) -> ValidationResults:
+        print_every = self.config.print_after_batches
+        running_loss = 0.0
+        running_samples = 0
 
-    def run_validation(self):
-        print("> Starting validation...")
-        print()
-        self.model.eval()
+        total_batches = len(self.train_data_loader)
         start_time = time.time()
-        with torch.no_grad():
-            validation_results = self._validate()
+
+        if self.config.batch_limit is not None and total_batches >= self.config.batch_limit:
+            total_batches_text = f"{self.config.batch_limit:,} (limited from {total_batches:,} by config.batch_limit)"
+            total_batches = self.config.batch_limit
+        else:
+            total_batches_text = f"{total_batches:,}"
+
+        print(f"> Starting train-comparable validation... (batch_size={self.config.batch_size}, total_batches={total_batches_text})")
+        print()
+
+        total_loss = 0.0
+        total_samples = 0
+        for batch_idx, raw_batch in enumerate(self.train_data_loader):
+            batch_results = self.process_batch(raw_batch)
+
+            loss = batch_results.total_loss
+            running_samples += batch_results.num_samples
+            running_loss += loss.item()
+            total_samples += batch_results.num_samples
+            total_loss += loss.item()
+
+            batch_num = batch_idx + 1
+            if batch_num % print_every == 0 or batch_num == total_batches:
+                print(f"Validation batch {batch_num}/{total_batches}, Recent Avg Loss: {(running_loss / running_samples):.3g}")
+                running_loss = 0.0
+                running_samples = 0
+
+            if batch_num == total_batches:  # Handle self.config.batch_limit
+                break
+
+        average_loss = total_loss / total_samples if total_samples > 0 else 0.0
+
+        validation_results = ValidationResults(
+            epoch=self.epoch,
+            train_comparable_loss=average_loss,
+            validation_loss=average_loss,
+        )
+
         self.latest_validation_results = validation_results
         if len(self.all_validation_results) == 0 or self.all_validation_results[-1].epoch < validation_results.epoch:
             self.all_validation_results.append(validation_results)
@@ -654,19 +715,33 @@ class ModelTrainerBase:
             self.best_validation_results = validation_results
 
         time_elapsed = time.time() - start_time
-        validation_average_train_loss = self.latest_validation_results.average_training_loss
+        validation_average_train_loss = self.latest_validation_results.train_comparable_loss
         if self.latest_training_results is not None:
             train_average_loss = self.latest_training_results.average_loss
-            overfitting_measure = (validation_average_train_loss - train_average_loss)/validation_average_train_loss if validation_average_train_loss > 0 else float('inf')
+            overfitting_measure = (validation_average_train_loss - train_average_loss) / validation_average_train_loss if validation_average_train_loss > 0 else float('inf')
         else:
             train_average_loss = "UNK"
             overfitting_measure = "UNK"
-        
-        print(f"Validation complete (Validation loss: {validation_results.validation_loss:.3g}, Time: {time_elapsed:.1f}s, Val/Train Loss: {validation_average_train_loss:.3g}/{train_average_loss:.3g}, Overfitting: {overfitting_measure:.2%})")
+
+        print(f"Train-comparable validation complete (Val/Train Loss: {validation_average_train_loss:.3g}/{train_average_loss:.3g}, Overfitting: {overfitting_measure:.2%}, Time: {time_elapsed:.1f}s)")
         print()
 
-    def _validate(self) -> ValidationResults: 
-        raise NotImplementedError("This class method should be implemented by subclasses")
+    def validate(self) -> ValidationResults:
+        print("> Starting validation...")
+        print()
+        self.model.eval()
+
+        with torch.no_grad():
+            validation_results = self.train_compatible_validation()
+
+            custom_results = self.custom_validation()
+            if custom_results is None:
+                custom_results = {}
+
+            for key, value in custom_results.items():
+                validation_results.key = value
+
+        return validation_results
 
     def print_detailed_parameter_counts(self) -> None:
         print("All parameter sizes:")
@@ -761,7 +836,7 @@ def upload_model_artifact(
         description: Optional description for the artifact
     """
     if not os.path.exists(file_path):
-        print(f"⚠️  Model file not found: {file_path}")
+        print(f"⚠️ Model file not found: {file_path}")
         return None
     
     # Create artifact

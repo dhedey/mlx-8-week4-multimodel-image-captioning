@@ -205,7 +205,7 @@ if __name__ == "__main__":
 
         if args.immediate_validation:
             print("Immediate validation enabled, running validation before training:")
-            trainer.run_validation()
+            trainer.validate()
 
         if trainer.epoch >= trainer.config.epochs:
             raise ValueError(f"Model {trainer.model.model_name} has already finished training its {trainer.config.epochs} epochs. Use --end-epoch <new_total_epochs> to continue training.")

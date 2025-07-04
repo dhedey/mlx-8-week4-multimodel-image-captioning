@@ -141,7 +141,7 @@ if __name__ == "__main__":
 
     if args.immediate_validation:
         print("Immediate validation enabled, running validation before training:")
-        trainer.run_validation()
+        trainer.validate()
 
     results = trainer.train()
 

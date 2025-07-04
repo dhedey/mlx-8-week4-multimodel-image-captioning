@@ -63,8 +63,13 @@ class ImageCaptioningModelTrainer(ModelTrainerBase):
             collate_fn=collate_fn
         )
 
-    def get_train_data_loader(self):
+    @property
+    def train_data_loader(self):
         return self.train_loader
+
+    @property
+    def validation_data_loader(self):
+        return self.test_loader
 
     def process_batch(self, collated_batch) -> BatchResults:
         device = self.model.get_device()
@@ -101,7 +106,7 @@ class ImageCaptioningModelTrainer(ModelTrainerBase):
             }
         )
     
-    def _validate(self) -> ValidationResults:
+    def custom_validation(self) -> Optional[dict]:
         print_example_count = 0
         for raw_batch in self.uncollated_validation_loader:
             for item in raw_batch:
@@ -115,27 +120,4 @@ class ImageCaptioningModelTrainer(ModelTrainerBase):
                 print()
                 print_example_count += 1
 
-        total_loss = 0.0
-        num_samples = 0
-
-        for batch_idx, collated_batch in enumerate(self.test_loader):
-            results = self.process_batch(collated_batch)
-
-            total_loss += results.total_loss.item()
-            num_samples += results.num_samples
-
-            batch_num = batch_idx + 1
-            if self.config.batch_limit is not None and batch_num >= self.config.batch_limit:
-                print("Ending validation early due to self.config.batch_limit")
-                break
-
-        average_loss = total_loss / num_samples if num_samples > 0 else 0.0
-
-        print(f"Validation complete: {num_samples} samples, {average_loss:.3g} average loss")
-        print()
-
-        return ValidationResults(
-            epoch=self.epoch,
-            average_training_loss=average_loss,
-            validation_loss=average_loss,
-        )
+        return None

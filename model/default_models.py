@@ -22,7 +22,7 @@ DEFAULT_MODEL_PARAMETERS = {
             # Note: This is a very small batch size for Qwen models, but it is necessary to fit in memory.
             batch_size=4,
             print_after_batches=5,
-            validation_max_print_examples=5 if has_cuda else 1,
+            validation_max_print_examples=3 if has_cuda else 1,
             epochs=5,
             learning_rate=0.0005,
             optimizer="adamw",
@@ -62,9 +62,12 @@ DEFAULT_MODEL_PARAMETERS = {
         ),
         "model_trainer": ImageCaptioningModelTrainer,
         "training": ImageCaptioningModelTrainingConfig(
-            batch_size=128,
+            batch_size=4,
             epochs=10,
             learning_rate=0.001,
+            print_after_batches=5,
+            validation_max_print_examples=5 if has_cuda else 1,
+            custom_validate_after_batches=100,
             optimizer="adamw",
             dataset_kind="standard",
             save_only_grad_weights=True,
@@ -129,4 +132,4 @@ if __name__ == "__main__":
         trainer = ModelTrainerBase.load(model, training_config, training_state)
         print(f"Latest validation metrics: {trainer.latest_validation_results}")
         print(f"Running model to check it's working...")
-        trainer.run_validation()
+        trainer.validate()
