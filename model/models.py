@@ -12,7 +12,7 @@ import einops
 import pandas as pd
 import math
 import PIL
-from typing import Optional, Self, Any, Union
+from typing import Optional, Self, Any, Union, Generator
 from peft import LoraConfig, TaskType, get_peft_model
 
 from sympy.stats.rv import probability
@@ -66,12 +66,11 @@ class ImageCaptioningModel(ModelBase):
     def special_token_ids(self) -> SpecialTokenIds:
         return self.multi_modal_model.special_token_ids
 
-    def generate_caption(self, image, max_token_length: int = 100) -> str:
+    def generate_caption_streaming(self, image, max_token_length: int = 100) -> Generator[str, None, None]:
         collated_batch = self.collate([{"image": image, "caption": ""}])
         caption_section: CaptionSection = collated_batch["caption"]
         caption_section.section_token_ids = caption_section.section_token_ids[:, 0:2] # Start with <|im_start|> <|caption|>
 
-        is_truncated = False
         end_section_token_id = self.multi_modal_model.special_token_ids.section_end
 
         initial_result: MultiModalModelResult = self.multi_modal_model([
@@ -86,7 +85,7 @@ class ImageCaptioningModel(ModelBase):
         # Read the next token from the <|caption|> token
         next_token_logits = caption_logits[0, 1, :]
         next_token_id = next_token_logits.argmax().item()
-        token_ids = [next_token_id]
+        yield self.multi_modal_model.token_ids_to_text([next_token_id])
 
         for i in range(max_token_length):
             next_token_embed = self.multi_modal_model.embed_token_id(next_token_id, batch_size=1)
@@ -98,15 +97,15 @@ class ImageCaptioningModel(ModelBase):
             if next_token_id == end_section_token_id:
                 break
             else:
-                token_ids.append(next_token_id)
+                yield self.multi_modal_model.token_ids_to_text([next_token_id])
         else:
-            is_truncated = True
+            yield " [TRUNCATED]"
 
-        output = self.multi_modal_model.token_ids_to_text(token_ids)
-        if is_truncated:
-            output += " [TRUNCATED]"
-
-        return output
+    def generate_caption(self, image, max_token_length: int = 100) -> str:
+        full_caption = ""
+        for token in self.generate_caption_streaming(image, max_token_length=max_token_length):
+            full_caption += token
+        return full_caption
 
 if __name__ == "__main__":
    print("Run default_models instead of this file")

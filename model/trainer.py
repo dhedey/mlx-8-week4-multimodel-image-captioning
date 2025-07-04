@@ -109,8 +109,10 @@ class ImageCaptioningModelTrainer(ModelTrainerBase):
                     break
                 print(f"Example {print_example_count + 1}")
                 print(f"- Actual caption   : {item["caption"]}")
-                caption = self.model.generate_caption(item["image"])
-                print(f"- Generated caption: {caption}")
+                print(f"- Generated caption: ", end="", flush=True)
+                for token in self.model.generate_caption_streaming(item["image"]):
+                    print(token, end="", flush=True)
+                print()
                 print_example_count += 1
 
         total_loss = 0.0

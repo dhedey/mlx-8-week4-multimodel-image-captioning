@@ -115,16 +115,18 @@ if __name__ == "__main__":
 
         print(f"Loading Model: {best_version}")
 
-        trainer = ModelTrainerBase.load_with_model(
-            best_version,
-        )
-        print(f"Latest validation metrics: {trainer.latest_validation_results}")
+        model, training_state, training_config = ModelBase.load_advanced(model_name=best_version)
+        model = model.eval()
 
-        model = trainer.model
         if isinstance(model, ImageCaptioningModel):
             print("Generating caption for example image:")
-            print(model.generate_caption(example_image))
-            print()
-   
+            with torch.no_grad():
+                for token in model.generate_caption_streaming(example_image):
+                    print(token, end="", flush=True)
+                print()
+                print()
+
+        trainer = ModelTrainerBase.load(model, training_config, training_state)
+        print(f"Latest validation metrics: {trainer.latest_validation_results}")
         print(f"Running model to check it's working...")
         trainer.run_validation()
