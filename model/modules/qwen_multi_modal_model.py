@@ -20,6 +20,7 @@ from peft import LoraConfig, TaskType, get_peft_model
 from .multi_modal_model import MultiModalModel, SpecialTokenIds
 from .image_encoders import ClipImageEncoder, ClipImageEncoderConfig, ImageEncoderBase
 from ..common import ModuleConfig
+from .custom_lora import CustomLora, CustomLoraConfig
 
 class EmbeddingLearningStrategy(StrEnum):
     LEARN_ALL = "learn_all"
@@ -142,7 +143,19 @@ class QwenMultiModalModel(MultiModalModel):
                     self._special_token_ids.section_end,
                 ])
             case EmbeddingLearningStrategy.LORA:
-                raise NotImplementedError("LoRA has not been implemented for lm_head yet")
+                # For LoRA strategy, we freeze the base embeddings and lm_head
+                # and create a custom LoRA layer for the lm_head
+                self.qwen_model.embed_tokens.requires_grad_(False)
+                self.auto_model.lm_head.requires_grad_(False)
+                
+                # Create custom LoRA for lm_head since PEFT can't handle tied weights
+                self.lm_head_lora = CustomLora(CustomLoraConfig(
+                    input_dim=self.qwen_model.config.hidden_size,
+                    output_dim=len(self.tokenizer),  # vocab size
+                    rank=64,  # configurable rank
+                    dropout=0.1
+                ))
+                
 
         self.embedding_dimension: int = self.qwen_model.config.hidden_size
 
@@ -192,7 +205,10 @@ class QwenMultiModalModel(MultiModalModel):
         return self.qwen_model.embed_tokens(token_ids)
 
     def unembed_to_token_id_logits(self, hidden_state: torch.Tensor) -> torch.Tensor:
-        return self.auto_model.lm_head(hidden_state)
+        if self.lm_head_lora_diff is not None:
+            return self.auto_model.lm_head(hidden_state) + self.lm_head_lora_diff(hidden_state)
+        else:
+          self.auto_model.lm_head(hidden_state)
 
     def run_model(self, input_embeds: torch.Tensor, cache: Any = None) -> tuple[torch.Tensor, Any]:
         result = self.qwen_model(
