@@ -40,7 +40,7 @@ class TrainingConfig(PersistableData):
     batch_size: int
     epochs: int
     learning_rate: float
-    save_only_grad_weights: bool = True
+    save_only_grad_weights: bool = False
     warmup_epochs: int = 0 # Number of epochs to warm up the learning rate
     print_after_batches: int = 10
     batch_limit: Optional[int] = None

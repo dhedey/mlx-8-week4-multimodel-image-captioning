@@ -1,4 +1,6 @@
 from dataclasses import dataclass
+from enum import StrEnum
+
 import PIL.Image
 import torch.nn.functional as F
 import torch.nn as nn
@@ -19,11 +21,23 @@ from .multi_modal_model import MultiModalModel, SpecialTokenIds
 from .image_encoders import ClipImageEncoder, ClipImageEncoderConfig, ImageEncoderBase
 from ..common import ModuleConfig
 
+class EmbeddingLearningStrategy(StrEnum):
+    LEARN_ALL = "learn_all"
+    FREEZE_ALL = "freeze"
+    LEARN_NEW_WITH_GRAD_FILTERING = "learn_new_with_grad_filtering"
+    LORA = "lora"
+
+class SpecialTokensStrategy(StrEnum):
+    CREATE_NEW = "new_tokens"
+    REUSE_EXISTING_UNTRAINED = "reuse_existing_untrained"
+
 class QwenMultiModalModelConfig(ModuleConfig):
     freeze_visual_model: bool
-    freeze_new_special_token_embeddings: bool = False
+    special_tokens_strategy: SpecialTokensStrategy = SpecialTokensStrategy.CREATE_NEW
+    embedding_learning_strategy: Optional[EmbeddingLearningStrategy] = None
+    freeze_new_special_token_embeddings: Optional[bool] = False
+    """Included for back-compat only. Use embedding_learning_strategy instead"""
     apply_lora_to_mlp_layers: bool = False
-    apply_lora_to_lm_head_layer: bool = False
 
 class QwenMultiModalModel(MultiModalModel):
     def __init__(self, config: QwenMultiModalModelConfig):
@@ -31,6 +45,15 @@ class QwenMultiModalModel(MultiModalModel):
         model_name = "Qwen/Qwen3-0.6B-Base"
 
         self.config = config
+
+        if config.embedding_learning_strategy is None:
+            if config.freeze_new_special_token_embeddings is None:
+                raise ValueError("Please set new_token_embedding_learning_strategy")
+            # Backwards compatibility
+            if config.freeze_new_special_token_embeddings:
+                config.embedding_learning_strategy = EmbeddingLearningStrategy.FREEZE_ALL
+            else:
+                config.embedding_learning_strategy = EmbeddingLearningStrategy.LEARN_NEW_WITH_GRAD_FILTERING
 
         # Avoids an annoying error message, and the rust tokenizer is so fast that it's
         # fine not to parallelize. See https://stackoverflow.com/questions/62691279/how-to-disable-tokenizers-parallelism-true-false-warning
@@ -41,31 +64,45 @@ class QwenMultiModalModel(MultiModalModel):
         self.qwen_model: transformers.Qwen2Model = self.auto_model.model
 
         # SPECIAL TOKENS
-        # <|im_start|>, <|im_end|>, <|user|>, <|assistant|>:
-        # > Chat/Instruct models: Used and understood.
-        # > Base model: Present in vocab, but not used for chat structure by default.
-        # > <|endoftext|>: Used by both.
+        match config.special_tokens_strategy:
+            case SpecialTokensStrategy.CREATE_NEW:
+                # <|im_start|>, <|im_end|>, <|user|>, <|assistant|>:
+                # > Chat/Instruct models: Used and understood.
+                # > Base model: Present in vocab, but not used for chat structure by default.
+                # > <|endoftext|>: Used by both.
 
-        # Let's use the following structure
-        # <|im_start|><|image|>   ... <|im_end|>
-        # <|im_start|><|caption|> ... <|im_end|>
+                # Let's use the following structure
+                # <|im_start|><|image|>   ... <|im_end|>
+                # <|im_start|><|caption|> ... <|im_end|>
 
-        # Add custom tokens
-        self.tokenizer.add_tokens(["<|image|>", "<|caption|>"], special_tokens=True)
-        # Note - There is some special weight-tying in the auto-model/qwen-model, meaning
-        # the lm_head decoder has its weights tied encoder's embeddings, and this resizes both.
-        self.qwen_model.resize_token_embeddings(len(self.tokenizer))
-        assert self.qwen_model.embed_tokens.weight.shape[0] == len(self.tokenizer)
-        assert self.auto_model.lm_head.weight.shape[0] == len(self.tokenizer)
+                # Add custom tokens
+                self.tokenizer.add_tokens(["<|image|>", "<|caption|>"], special_tokens=True)
+                # Note - There is some special weight-tying in the auto-model/qwen-model, meaning
+                # the lm_head decoder has its weights tied encoder's embeddings, and this resizes both.
+                self.qwen_model.resize_token_embeddings(len(self.tokenizer))
+                assert self.qwen_model.embed_tokens.weight.shape[0] == len(self.tokenizer)
+                assert self.auto_model.lm_head.weight.shape[0] == len(self.tokenizer)
 
-        self._special_token_ids = SpecialTokenIds(
-            section_start = self.tokenizer.convert_tokens_to_ids("<|im_start|>"),
-            section_end = self.tokenizer.convert_tokens_to_ids("<|im_end|>"),
-            image = self.tokenizer.convert_tokens_to_ids("<|image|>"),
-            caption = self.tokenizer.convert_tokens_to_ids("<|caption|>"),
-            padding=self.tokenizer.pad_token_id,
-        )
-        print(f"Special token ids: {self._special_token_ids}")
+                self._special_token_ids = SpecialTokenIds(
+                    section_start = self.tokenizer.convert_tokens_to_ids("<|im_start|>"),
+                    section_end = self.tokenizer.convert_tokens_to_ids("<|im_end|>"),
+                    image = self.tokenizer.convert_tokens_to_ids("<|image|>"),
+                    caption = self.tokenizer.convert_tokens_to_ids("<|caption|>"),
+                    padding = self.tokenizer.pad_token_id,
+                )
+                print(f"Special token ids: {self._special_token_ids}")
+            case SpecialTokensStrategy.REUSE_EXISTING_UNTRAINED:
+                # Re-use existing special tokens which are untrained in the base model.
+                # This means we don't need to expand our vocabulary, and the default "save only learnable parameters"
+                # works okay
+                self._special_token_ids = SpecialTokenIds(
+                    section_start = self.tokenizer.convert_tokens_to_ids("<|im_start|>"),
+                    section_end = self.tokenizer.convert_tokens_to_ids("<|im_end|>"),
+                    image = self.tokenizer.convert_tokens_to_ids("<|vision_start|>"),
+                    caption = self.tokenizer.convert_tokens_to_ids("<|box_start|>"),
+                    padding = self.tokenizer.pad_token_id,
+                )
+                print(f"Special token ids: {self._special_token_ids}")
 
         # Enable LORA on the Qwen model. get_peft_model actually changes it in-place
         # We have to change it after the lm_head is resized by adding new tokens, else it won't work.
@@ -76,12 +113,9 @@ class QwenMultiModalModel(MultiModalModel):
         if config.apply_lora_to_lm_head_layer:
             # We were really struggling to predict the end of section tokens, so hopefully applying LoRA to the
             # lm_head layer could help with that.
-            # 
-            # We have to hackily disable the auto-tying of the lm_head layer with the embed_tokens layer so that
-            # LoRA can be applied without causing issues when the model runs.
-            # https://github.com/huggingface/peft/issues/2244#issuecomment-2511556202
-            lora_target_modules.append("embed_tokens")
-            lora_target_modules.append("lm_head")
+            # However, the lm_head is tied to the embed_tokens layer, which breaks LoRA.
+            # So let's do it ourselves.
+            raise NotImplementedError("Applying LoRA to the lm_head layer is not implemented yet. Would need to be done manually.")
 
         self.peft_model = get_peft_model(
             self.auto_model,    
@@ -94,13 +128,23 @@ class QwenMultiModalModel(MultiModalModel):
             ),
         )
 
-        if not config.freeze_new_special_token_embeddings:
-            self.set_some_token_embeddings_trainable([
-                self._special_token_ids.image,
-                self._special_token_ids.caption,
-                self._special_token_ids.section_start,
-                self._special_token_ids.section_end,
-            ])
+        match config.embedding_learning_strategy:
+            case EmbeddingLearningStrategy.LEARN_ALL:
+                self.qwen_model.embed_tokens.requires_grad_(True)
+                self.auto_model.lm_head.requires_grad_(True)
+            case EmbeddingLearningStrategy.FREEZE_ALL:
+                pass # Already frozen via the LoRA
+            case EmbeddingLearningStrategy.LEARN_NEW_WITH_GRAD_FILTERING:
+                self.qwen_model.embed_tokens.requires_grad_(True)
+                self.auto_model.lm_head.requires_grad_(True)
+                self.only_accept_gradients_for_these_token_ids([
+                    self._special_token_ids.image,
+                    self._special_token_ids.caption,
+                    self._special_token_ids.section_start,
+                    self._special_token_ids.section_end,
+                ])
+            case EmbeddingLearningStrategy.LORA:
+                raise NotImplementedError("LoRA has not been implemented for lm_head yet")
 
         self.embedding_dimension: int = self.qwen_model.config.hidden_size
 
@@ -110,15 +154,12 @@ class QwenMultiModalModel(MultiModalModel):
             freeze_visual_model=self.config.freeze_visual_model,
         ))
 
-    def set_some_token_embeddings_trainable(self, trainable_token_ids) -> None:
+    def only_accept_gradients_for_these_token_ids(self, trainable_token_ids) -> None:
         # Allow the model to learn (just) these embeddings
         # See this stack overflow post: https://stackoverflow.com/a/79621033
         # This should hopefully allow for predicting the end of section tokens at the end of captions
 
         # I don't quite know how the auto-tying logic works, so I'll just apply masking to both
-        self.qwen_model.embed_tokens.requires_grad_(True)
-        self.auto_model.lm_head.requires_grad_(True)
-
         @torch.utils.hooks.unserializable_hook
         def mask_embedding_gradients(grad):
             mask = torch.zeros_like(grad)
