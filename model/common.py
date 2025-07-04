@@ -288,6 +288,35 @@ class ModelBase(nn.Module):
         model.eval()
         return model
 
+    def print_detailed_parameter_counts(self) -> None:
+        normalized_parameter_counts = {}
+        learnable_weights_count = 0
+        total_weights_count = 0
+        for name, parameter in self.named_parameters():
+            total_weights_count += parameter.numel()
+            if not parameter.requires_grad:
+                continue
+            learnable_weights_count += parameter.numel()
+            normalized_name = re.sub(r'\d+', '*', name)
+            if normalized_name in normalized_parameter_counts:
+                normalized_parameter_counts[normalized_name]["instances"] += 1
+                normalized_parameter_counts[normalized_name]["weights_count"] += parameter.numel()
+            else:
+                normalized_parameter_counts[normalized_name] = {
+                    "instances": 1,
+                    "weights_count": parameter.numel(),
+                }
+        sorted_params = sorted(
+            normalized_parameter_counts.items(),
+            key=lambda item: item[1]["weights_count"],
+            reverse=True
+        )
+        
+        print(f"This {self.__class__.__name__} named \"{self.model_name}\" has {learnable_weights_count:,} learnable weights of {total_weights_count:,} total weights, spread as follows:")
+        for name, params in sorted_params:
+            print(f"- {name}: {params["weights_count"]:,} across {params["instances"]} instances")
+        print()
+
 def create_composite_scheduler(
     optimizer: optim.Optimizer,
     schedulers: list[str | tuple[str, dict]],
@@ -404,6 +433,7 @@ class ModelTrainerBase:
         learnable_weights_count = sum(p.numel() for p in model.parameters() if p.requires_grad)
         total_weights_count = sum(p.numel() for p in model.parameters())
         print(f"Initializing {self.__class__.__name__} for {model.__class__.__name__} named \"{model.model_name}\" (learnable weights = {learnable_weights_count:,} total weights = {total_weights_count:,})")
+        print()
 
         if overrides is None:
             overrides = TrainingOverrides()
@@ -411,7 +441,7 @@ class ModelTrainerBase:
         torch.manual_seed(overrides.seed)
 
         if overrides.print_detailed_parameter_counts:
-            self.print_detailed_parameter_counts()
+            self.model.print_detailed_parameter_counts()
 
         self.validate_after_epochs = overrides.validate_after_epochs
 
@@ -465,6 +495,7 @@ class ModelTrainerBase:
             self.best_validation_results = continuation.best_validation_results if continuation.best_validation_results is not None else continuation.latest_validation_results
             self.all_validation_results = continuation.all_validation_results
             print(f"Resuming training from saved state after epoch {self.epoch}")
+            print()
         else:
             self.epoch = 0
             self.total_training_time_seconds = 0.0
@@ -474,8 +505,6 @@ class ModelTrainerBase:
             self.latest_validation_results = None
             self.best_validation_results = None
             self.all_validation_results = []
-
-        print()
 
     @property
     def train_data_loader(self):
@@ -747,29 +776,6 @@ class ModelTrainerBase:
                 validation_results.key = value
 
         return validation_results
-
-    def print_detailed_parameter_counts(self) -> None:
-        print("All parameter sizes:")
-        normalized_parameter_counts = {}
-        for name, parameter in self.model.named_parameters():
-            if not parameter.requires_grad:
-                continue
-            normalized_name = re.sub(r'\d+', '*', name)
-            if normalized_name in normalized_parameter_counts:
-                normalized_parameter_counts[normalized_name]["instances"] += 1
-                normalized_parameter_counts[normalized_name]["weights_count"] += parameter.numel()
-            else:
-                normalized_parameter_counts[normalized_name] = {
-                    "instances": 1,
-                    "weights_count": parameter.numel(),
-                }
-        sorted_params = sorted(
-            normalized_parameter_counts.items(),
-            key=lambda item: item[1]["weights_count"],
-            reverse=True
-        )
-        for name, params in sorted_params:
-            print(f"- {name}: {params["weights_count"]:,} across {params["instances"]} instances")
 
     def save_model(self):
         scheduler_state = self.scheduler.state_dict() if self.scheduler is not None else None

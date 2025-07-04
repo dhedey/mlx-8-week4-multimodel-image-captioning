@@ -121,6 +121,8 @@ if __name__ == "__main__":
         model, training_state, training_config = ModelBase.load_advanced(model_name=best_version)
         model = model.eval()
 
+        model.print_detailed_parameter_counts()
+
         if isinstance(model, ImageCaptioningModel):
             print("Generating caption for example image:")
             with torch.no_grad():
@@ -130,6 +132,8 @@ if __name__ == "__main__":
                 print()
 
         trainer = ModelTrainerBase.load(model, training_config, training_state)
+
         print(f"Latest validation metrics: {trainer.latest_validation_results}")
+
         print(f"Running model to check it's working...")
-        trainer.validate()
+        trainer.custom_validation()
