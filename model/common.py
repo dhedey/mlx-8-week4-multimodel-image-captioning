@@ -10,9 +10,16 @@ import pathlib
 import inspect
 import re
 from typing import Optional, Self
-from pydantic import BaseModel as PydanticBaseModel, Field
+import pydantic
+from pydantic import Field
 
-class PersistableData(PydanticBaseModel):
+class PersistableData(pydantic.BaseModel):
+    model_config = pydantic.ConfigDict(
+        use_enum_values=True,
+        # See note here: https://docs.pydantic.dev/latest/api/config/#pydantic.config.ConfigDict.use_enum_values
+        validate_default=True,
+    )
+
     def to_dict(self) -> dict:
         return self.model_dump()
     
@@ -229,11 +236,7 @@ class ModelBase(nn.Module):
         if device is None:
             device = select_device()
 
-        if model_path is None:
-            if model_name is not None:
-                model_path = ModelBase.model_path(model_name)
-            else:
-                raise ValueError("Either model_name or model_path must be provided to load a model.")
+        model_path = cls.resolve_path(model_name=model_name, model_path=model_path)
 
         loaded_model_data = torch.load(model_path, map_location=device)
         print(f"Model data read from {model_path}")
@@ -704,11 +707,11 @@ class ModelTrainerBase:
             return
 
         best_model_name = self.model.model_name + '-best'
-        try:
+        if ModelBase.exists(model_name=best_model_name):
             _, best_training_state, _ = ModelBase.load_advanced(model_name=best_model_name, device="cpu")
             best_validation_loss = best_training_state.latest_validation_results.validation_loss
             best_validation_epoch = best_training_state.latest_validation_results.epoch
-        except Exception:
+        else:
             best_validation_loss = None
             best_validation_epoch = None
 
