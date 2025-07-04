@@ -155,7 +155,7 @@ class QwenMultiModalModel(MultiModalModel):
                 # Create custom LoRA for lm_head since PEFT can't handle tied weights
                 self.lm_head_lora = CustomLora(CustomLoraConfig(
                     input_dim=self.qwen_model.config.hidden_size,
-                    output_dim=len(self.tokenizer),  # vocab size
+                    output_dim=self.auto_model.lm_head.weight.shape[0],  # vocab size
                     rank=config.lora_rank,  # configurable rank
                     dropout=config.lora_dropout,
                     alpha=config.lora_alpha,
