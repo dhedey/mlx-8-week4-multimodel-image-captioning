@@ -232,7 +232,7 @@ class ModelBase(nn.Module):
         model_path: Optional[str] = None,
     ) -> TrainingState:
         model_path = cls.resolve_path(model_name=model_name, model_path=model_path)
-        loaded_model_data = torch.load(model_path, map_location=device)
+        loaded_model_data = torch.load(model_path)
         return TrainingState.from_dict(loaded_model_data["training"]["state"])
 
     @classmethod
@@ -725,7 +725,7 @@ class ModelTrainerBase:
                 best_validation_loss = best_training_state.latest_validation_results.validation_loss
                 best_validation_epoch = best_training_state.latest_validation_results.epoch
             except Exception as e:
-                print(f"⚠️  Failed to load the best model training state: {e}")
+                print(f"⚠️ Failed to load the best model training state: {e}")
 
         def format_optional_float(value):
             return f"{value:.3g}" if value is not None else "N/A"
