@@ -56,7 +56,7 @@ DEFAULT_MODEL_PARAMETERS = {
         "model": ImageCaptioningModelConfig(
             model = QwenMultiModalModelConfig(
                 freeze_visual_model=True,
-                special_tokens_strategy=SpecialTokensStrategy.REUSE_EXISTING_UNTRAINED,
+                special_tokens_strategy=SpecialTokensStrategy.CREATE_NEW,
                 embedding_learning_strategy=EmbeddingLearningStrategy.LORA,
             )
         ),
